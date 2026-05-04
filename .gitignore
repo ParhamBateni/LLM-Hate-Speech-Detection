@@ -1,0 +1,7 @@
+.venv
+cache
+.env
+.DS_Store
+runs/
+*.sql
+*/__pycache__/

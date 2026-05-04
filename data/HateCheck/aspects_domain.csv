@@ -1,0 +1,7 @@
+aspect,multi_value_supported,values_list
+target_type,false,"[NA, disability, gender, nationality, race, religion, sexual orientation]"
+dominance,false,"[NA, false]"
+explicit_ref,true,"[NA, group_characteristic, slur, stereotype]"
+incites,true,"[NA, discrimination, hate, violence]"
+group_insult,false,"[NA, false, true]"
+in_group,false,"[NA, true]"

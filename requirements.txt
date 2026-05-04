@@ -1,0 +1,10 @@
+huggingface-hub
+transformers
+datasets
+accelerate
+# torch
+numpy
+pandas
+scikit-learn
+tqdm
+dotenv
