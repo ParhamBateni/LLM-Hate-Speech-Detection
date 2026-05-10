@@ -123,12 +123,12 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             ) from e
 
     def prompt_text(self) -> str:
-        return ("Hate speech is defined using the following template based on5 criteria:\n"
-            f"1- Target group: List of target groups that if targetted might be considered for hate speech." # TODO: investigate the effect of might and should
-            f"2- Dominance: List of dominant groups to take into account as a potential target of hate speech."
+        return ("Hate speech is defined using the following template based on 5 criteria:\n"
+            f"1- Target group: List of target groups that if targetted might be considered for hate speech.\n" # TODO: investigate the effect of might and should
+            f"2- Dominance: List of dominant groups to take into account as a potential target of hate speech.\n"
             f"3- Perpetrator characteristics: List of characteristics of the perpetrator that should be taken into account e.g. socitial roles or being a member of the target group itself."
-            f"4- Negative reference: List of negative references to the target group that should be taken into account. e.g. stereotypes, group characteristics, slurs, etc." # TODO: investigate the effect of adding explicit or implicit
-            f"5- Potential consequences: List of potential consequences of the hate speech that should be taken into account. e.g. violence, hate, discrimination, etc."
+            f"4- Negative reference: List of negative references to the target group that should be taken into account. e.g. stereotypes, group characteristics, slurs, etc.\n" # TODO: investigate the effect of adding explicit or implicit
+            f"5- Potential consequences: List of potential consequences of the hate speech that should be taken into account. e.g. violence, hate, discrimination, etc.\n\n"
             f"The hate speech definition is then defined as follows:\n"
             f"Target group: {self._target_group}\n"
             f"Dominance: {self._dominance}\n"

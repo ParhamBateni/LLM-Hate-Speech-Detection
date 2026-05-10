@@ -28,6 +28,16 @@ models:
   flan_t5_small:
     path: "google/flan-t5-small"
     enable: false
+prompting:
+  - type: "zero-shot"
+  # - type: "few-shot"
+  #   num_shots: 5
+  #   few_shot_mode: "random"
+  # - type: "few-shot"
+  #   num_shots: 5
+  #   few_shot_mode: "smart"
+  # - type: "chain-of-thought"
+
 extra_hate_speech_definitions: {}
 debug_mode: true
 save_predictions: true

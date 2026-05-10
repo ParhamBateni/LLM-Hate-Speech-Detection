@@ -14,6 +14,7 @@ import os
 import shutil
 import random
 import numpy as np
+from prompting import ZeroShotPrompting, FewShotPrompting, ChainOfThoughtPrompting, Prompting
 load_dotenv()
 
 def read_config(config_path: str):
@@ -28,30 +29,31 @@ def seed_everything(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 
-def _build_prompt(text: str, definition: Optional[HateSpeechDefinition]) -> str:
-    definition_block = ""
-    if definition:
-        definition_block = "HATE SPEECH DEFINITION:\n" + definition.prompt_text() + "\n"
+# def _build_prompt(text: str, definition: Optional[HateSpeechDefinition]) -> str:
+#     definition_block = ""
+#     if definition:
+#         definition_block = "HATE SPEECH DEFINITION:\n" + definition.prompt_text() + "\n"
 
-    prompt = f"""Classify the following TEXT as hate speech or not hate speech{" based on HATE SPEECH DEFINITION" if definition else ""}.
-    Your prediction should be in the following format:
-        PREDICTION: either 'hateful' or 'non-hateful'
-        CONFIDENCE SCORE: a number between 0 and 1 which shows the confidence in your answer
-        REASON: only one line explanation for your prediction and confidence score
+#     prompt = f"""Classify the following TEXT as hate speech or not hate speech{" based on HATE SPEECH DEFINITION" if definition else ""}.
+#     Your prediction should be in the following format:
+#         PREDICTION: either 'hateful' or 'non-hateful'
+#         CONFIDENCE SCORE: a number between 0 and 1 which shows the confidence in your answer
+#         REASON: only one line explanation for your prediction and confidence score
         
-    {definition_block}
+#     {definition_block}
     
-    TEXT: {text}
+#     TEXT: {text}
     
-    PREDICTION:"""
-    return prompt
+#     PREDICTION:"""
+#     return prompt
 
 
 def predict(
+    dataset: datasets.Dataset,
     model,
     tokenizer,
-    dataset: datasets.Dataset,
     definition: Optional[HateSpeechDefinition] = None,
+    prompting: Optional[Prompting] = None,
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None
@@ -75,14 +77,31 @@ def predict(
         num_samples = num_batches * batch_size
     for start in tqdm(range(0, num_samples, batch_size), desc="Predicting..."):
         batch = iterator[start : start + batch_size]
-        prompts = [
-            _build_prompt(item["text"], definition)
+        system_prompt = prompting.build_system_prompt(definition)
+        conversations = [
+            [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": item["text"]},
+            ]
             for item in batch
         ]
         batch_labels = [item["label"] for item in batch]
         batch_texts = [item["text"] for item in batch]
-
-        inputs = tokenizer(prompts, return_tensors="pt", padding=True, truncation=True)
+        
+        prompt_strings = [
+            tokenizer.apply_chat_template(
+                conv,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            for conv in conversations
+        ]
+        inputs = tokenizer(
+            prompt_strings,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
         inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
 
         generation_kwargs = {
@@ -98,20 +117,29 @@ def predict(
             #     generation_kwargs["generator"] = torch.Generator().manual_seed(generation_config.get("seed") + start)
 
         with torch.no_grad():
+            # t0 = time.time()
             outputs = model.generate(
                 **inputs,
+                output_scores=True,
+                return_dict_in_generate=True,
                 **generation_kwargs,
             )
+            # t1 = time.time()
+            # print(f"Time taken: {t1 - t0:.3f} seconds for batch generation")
+            # raise Exception("Stop here")
 
-
+        sequences = outputs.sequences
+        logits = outputs.scores
+        prompt_len = int(inputs["input_ids"].shape[1])
         for j in range(len(batch)):
             i = start + j
-            new_tokens = outputs[j][len(inputs["input_ids"][j])-5:]
+            new_tokens = sequences[j][prompt_len:]
             answer = tokenizer.decode(new_tokens, skip_special_tokens=True)
-            answer = answer[answer.find("PREDICTION"):].strip()
+            prediction_index = answer.find("PREDICTION:")
+            answer = answer[prediction_index:].strip()
 
             lines = [ln.strip() for ln in answer.split("\n") if ln.strip()]
-            if len(lines) < 3:
+            if len(lines) < 2:
                 problematic_generations.append({"index": i, "text": batch_texts[j]})
                 continue
 
@@ -121,33 +149,25 @@ def predict(
                 continue
 
             prediction = prediction_text.split(":", 1)[1].strip().lower()
-            if prediction == "non hateful":
+            if prediction in ["non-hateful", "non hateful", "not hate speech", "not hate-speech"]:
                 prediction = "non-hateful"
-            if prediction not in ["hateful", "non-hateful"]:
+            elif prediction in ["hateful", "hate speech", "hate-speech"]:
+                prediction = "hateful"
+            else:
                 problematic_generations.append({"index": i, "text": batch_texts[j]})
                 continue
 
-            confidence_score_text = lines[1]
-            if not confidence_score_text.lower().startswith("confidence score:"):
-                problematic_generations.append({"index": i, "text": batch_texts[j]})
-                continue
-            try:
-                confidence_score = float(confidence_score_text.split(":", 1)[1].strip())
-            except ValueError:
-                problematic_generations.append({"index": i, "text": batch_texts[j]})
-                continue
-            if confidence_score < 0 or confidence_score > 1:
-                problematic_generations.append({"index": i, "text": batch_texts[j]})
-                continue
 
-            reason_text = lines[2]
+            reason_text = lines[1]
             if not reason_text.lower().startswith("reason:"):
                 problematic_generations.append({"index": i, "text": batch_texts[j]})
                 continue
             reason = reason_text.split(":", 1)[1].strip()
 
+            # TODO: Calculate confidence score
+            # confidence_score = torch.max(logits[:][j],dim=1)
             predictions.append(prediction)
-            confidence_scores.append(confidence_score)
+            # confidence_scores.append(confidence_score)
             reasons.append(reason)
             texts.append(batch_texts[j])
             labels.append(batch_labels[j])
@@ -156,7 +176,7 @@ def predict(
         {
             "text": texts,
             "prediction": predictions,
-            "confidence_score": confidence_scores,
+            # "confidence_score": confidence_scores,
             "reason": reasons,
             "label": labels,
         }
@@ -205,68 +225,91 @@ if __name__ == "__main__":
     print("Models loaded")
     print(*[f"{name}: {model[0]}" for name, model in models.items()])
 
+    prompting = []
+    for prompting_config in config["prompting"]:
+        if prompting_config["type"] == "zero-shot":
+            prompting.append(ZeroShotPrompting())
+        elif prompting_config["type"] == "few-shot":
+            prompting.append(FewShotPrompting(num_shots=prompting_config["num_shots"], few_shot_mode=prompting_config["few_shot_mode"]))
+        elif prompting_config["type"] == "chain-of-thought":
+            prompting.append(ChainOfThoughtPrompting())
+        else:
+            raise ValueError(f"Invalid prompting type: {prompting_config['type']}")
+
+    print("Prompting methods loaded")
+    print(*[f"{prompting_method.name}" for prompting_method in prompting])
+
 
     extra_definitions = []
     for definition in config["extra_hate_speech_definitions"]:
         definition = HateSpeechDefinition.from_config(definition)
         extra_definitions.append(definition)
     
+
+    print("-" * 100)
     dataset_names = []
     model_names = []
+    prompting_names = []
     definition_names = []
     macro_f1_scores = []
+    total_num_experiments = len(datasets) * len(models) * len(prompting) * sum([len(dataset.hate_speech_definitions) for dataset in datasets]) + len(extra_definitions)
+    num_experiments_completed = 0
     for dataset in datasets:
         for model in models:
             current_model, current_tokenizer = models[model]
-            for definition in dataset.hate_speech_definitions + extra_definitions:
-                model_name = getattr(current_model, "name_or_path", "model").replace("/", "_")
-                experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name)
-                os.makedirs(experiment_folder)
-                print("Running experiment on model " + model_name + " and dataset " + dataset.name + (" for definition " + definition.name if definition else ""))
-                predictions_df, problematic_generations = predict(
-                    current_model,
-                    current_tokenizer,
-                    dataset,
-                    definition,
-                    num_batches=1 if debug_mode else 1e9,
-                    generation_config=generation_config,
-                )
-                print("A total of " + str(len(problematic_generations)) + " problematic generations were found")
-                print(problematic_generations)
-                print("First 5 rows of predictions dataframe:")
-                print(predictions_df.head())
-                text_report = classification_report(
-                    predictions_df["label"],
-                    predictions_df["prediction"],
-                    labels=["non-hateful", "hateful"],
-                    target_names=["non-hateful", "hateful"],
-                    zero_division=1,
-                )
-                print(text_report)
-                dict_report = classification_report(
-                    predictions_df["label"],
-                    predictions_df["prediction"],
-                    labels=["non-hateful", "hateful"],
-                    target_names=["non-hateful", "hateful"],
-                    zero_division=1,
-                    output_dict=True,
-                )
-                macro_f1_score = dict_report["macro avg"]["f1-score"]
-                dataset_names.append(dataset.name)
-                model_names.append(model_name)
-                definition_names.append(definition.name)
-                macro_f1_scores.append(macro_f1_score)
-                with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
-                    f.write(text_report)
-                with open(os.path.join(experiment_folder, "problematic_generations_indices.txt"), "w") as f:
-                    f.write(str(problematic_generations))
-                if config["save_predictions"]:
-                    predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
+            model_name = getattr(current_model, "name_or_path", "model").replace("/", "_")
+            for prompting_method in prompting:
+                for definition in dataset.hate_speech_definitions + extra_definitions:
+                    experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
+                    os.makedirs(experiment_folder)
+                    print(f"Running experiment {num_experiments_completed}/{total_num_experiments}:\nmodel: {model_name}\ndataset: {dataset.name}\ndefinition: {definition.name}\nprompting: {prompting_method.name}")
+                    print("-" * 100)
+                    predictions_df, problematic_generations = predict(
+                        dataset,
+                        current_model,
+                        current_tokenizer,
+                        definition,
+                        prompting_method,
+                        num_batches=1 if debug_mode else 1e9,
+                        generation_config=generation_config,
+                    )
+                    print("A total of " + str(len(problematic_generations)) + " problematic generations were found")
+                    print(problematic_generations)
+                    text_report = classification_report(
+                        predictions_df["label"],
+                        predictions_df["prediction"],
+                        labels=["non-hateful", "hateful"],
+                        target_names=["non-hateful", "hateful"],
+                        zero_division=1,
+                    )
+                    print(text_report)
+                    dict_report = classification_report(
+                        predictions_df["label"],
+                        predictions_df["prediction"],
+                        labels=["non-hateful", "hateful"],
+                        target_names=["non-hateful", "hateful"],
+                        zero_division=1,
+                        output_dict=True,
+                    )
+                    macro_f1_score = dict_report["macro avg"]["f1-score"]
+                    dataset_names.append(dataset.name)
+                    model_names.append(model_name)
+                    definition_names.append(definition.name)
+                    prompting_names.append(prompting_method.name)
+                    macro_f1_scores.append(macro_f1_score)
+                    with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
+                        f.write(text_report)
+                    with open(os.path.join(experiment_folder, "problematic_generations_indices.txt"), "w") as f:
+                        f.write(str(problematic_generations))
+                    if config["save_predictions"]:
+                        predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
+                    num_experiments_completed += 1
 
     pd.DataFrame(
         {
             "dataset": dataset_names,
             "model": model_names,
+            "prompting": prompting_names,
             "definition": definition_names,
             "macro_f1_score": macro_f1_scores,
         }
