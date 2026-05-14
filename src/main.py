@@ -241,7 +241,7 @@ def predict(
             retry_number + 1,
         )
         predictions_df = pd.concat([predictions_df, predictions_df2])
-        problematic_generations_df = pd.concat([problematic_generations_df, problematic_generations_df2])
+        problematic_generations_df = problematic_generations_df2
     return predictions_df, problematic_generations_df
 
 if __name__ == "__main__":
