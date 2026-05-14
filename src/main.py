@@ -29,25 +29,6 @@ def seed_everything(seed: int):
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-
-# def _build_prompt(text: str, definition: Optional[HateSpeechDefinition]) -> str:
-#     definition_block = ""
-#     if definition:
-#         definition_block = "HATE SPEECH DEFINITION:\n" + definition.prompt_text() + "\n"
-
-#     prompt = f"""Classify the following TEXT as hate speech or not hate speech{" based on HATE SPEECH DEFINITION" if definition else ""}.
-#     Your prediction should be in the following format:
-#         PREDICTION: either 'hateful' or 'non-hateful'
-#         CONFIDENCE SCORE: a number between 0 and 1 which shows the confidence in your answer
-#         REASON: only one line explanation for your prediction and confidence score
-        
-#     {definition_block}
-    
-#     TEXT: {text}
-    
-#     PREDICTION:"""
-#     return prompt
-
 def calculate_confidence_score(
     step_logits: torch.Tensor,
     chosen_token_ids: torch.Tensor,
@@ -84,7 +65,7 @@ def calculate_confidence_score(
     if not bool(valid.any()):
         return float("nan")
     token_logp = token_logp[valid]
-    return float(torch.exp(token_logp.mean()).item())
+    return np.round(float(torch.exp(token_logp.mean()).item()), 3)
 
 
 def predict(
@@ -278,32 +259,30 @@ if __name__ == "__main__":
 
     datasets_list = []
     for dataset_name in tqdm(config["datasets"], "Loading datasets"):
-        if config["datasets"][dataset_name]["enable"]:
-            definitions = []
-            for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"]:
-                try:
-                    definition = HateSpeechDefinition.load_definition(hate_speech_definition, domain=domain)
-                except Exception as e:
-                    print(f"Error loading definition {hate_speech_definition.get('type')}: {e}")
-                    continue
-                definitions.append(definition)
+        definitions = []
+        for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"]:
             try:
-                # datasets_list.append(HateSpeechDataset("problematic", datasets.load_dataset("csv", data_files="data/problematic_generations.csv"), definitions))
-                datasets_list.append(HateSpeechDataset.load_dataset(dataset_name, config["datasets"][dataset_name]["path"], config["datasets"][dataset_name]["text_column"], config["datasets"][dataset_name]["label_column"], definitions))
+                definition = HateSpeechDefinition.load_definition(hate_speech_definition, domain=domain)
             except Exception as e:
-                print(f"Error loading dataset {dataset_name}: {e}")
+                print(f"Error loading definition {hate_speech_definition.get('type')}: {e}")
                 continue
+            definitions.append(definition)
+        try:
+            # datasets_list.append(HateSpeechDataset("problematic", datasets.load_dataset("csv", data_files="data/problematic_generations.csv"), definitions))
+            datasets_list.append(HateSpeechDataset.load_dataset(dataset_name, config["datasets"][dataset_name]["path"], config["datasets"][dataset_name]["text_column"], config["datasets"][dataset_name]["label_column"], definitions))
+        except Exception as e:
+            print(f"Error loading dataset {dataset_name}: {e}")
+            continue
     print("Datasets loaded")
     print(*[f"{dataset.name}: {dataset.dataset.num_rows}" for dataset in datasets_list])
 
     models = {}
     for model_name in tqdm(config["models"], "Loading models"):
-        if config["models"][model_name]["enable"]:
-            try:
-                models[model_name] = load_model(config["models"][model_name]["path"], DEVICE)
-            except Exception as e:
-                print(f"Error loading model {model_name}: {e}")
-                continue
+        try:
+            models[model_name] = load_model(config["models"][model_name]["path"], DEVICE)
+        except Exception as e:
+            print(f"Error loading model {model_name}: {e}")
+            continue
     
     print("Models loaded")
     print(*[f"{name}: {model[0]}" for name, model in models.items()])
