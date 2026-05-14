@@ -288,8 +288,8 @@ if __name__ == "__main__":
                     continue
                 definitions.append(definition)
             try:
-                datasets_list.append(HateSpeechDataset("problematic", datasets.load_dataset("csv", data_files="data/problematic_generations.csv"), definitions))
-                # datasets.append(HateSpeechDataset.load_dataset(dataset_name, config["datasets"][dataset_name]["path"], config["datasets"][dataset_name]["text_column"], config["datasets"][dataset_name]["label_column"], definitions))
+                # datasets_list.append(HateSpeechDataset("problematic", datasets.load_dataset("csv", data_files="data/problematic_generations.csv"), definitions))
+                datasets_list.append(HateSpeechDataset.load_dataset(dataset_name, config["datasets"][dataset_name]["path"], config["datasets"][dataset_name]["text_column"], config["datasets"][dataset_name]["label_column"], definitions))
             except Exception as e:
                 print(f"Error loading dataset {dataset_name}: {e}")
                 continue
