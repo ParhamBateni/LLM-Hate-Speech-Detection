@@ -42,7 +42,7 @@ prompting:
   # - type: "chain-of-thought"
 
 extra_hate_speech_definitions: {}
-debug_mode: true
+debug_mode: false
 save_predictions: true
 num_generation_retries: 5
 generation:

@@ -227,7 +227,7 @@ def predict(
         }
     )
     problematic_generations_df = pd.DataFrame(problematic_generations)
-    if len(problematic_generations) > 0 and retry_number < num_generation_retries:
+    if len(problematic_generations) > 0 and retry_number < num_generation_retries and generation_config.get("do_sample", True):
         predictions_df2, problematic_generations_df2 = predict(
             datasets.Dataset.from_pandas(problematic_generations_df),
             model,
@@ -380,13 +380,13 @@ if __name__ == "__main__":
                         zero_division=1,
                         output_dict=True,
                     )
-                    macro_f1_score = dict_report["macro avg"]["f1-score"]
+                    macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
                     dataset_names.append(dataset.name)
                     model_names.append(model_name)
                     definition_names.append(definition.name)
                     prompting_names.append(prompting_method.name)
                     macro_f1_scores.append(macro_f1_score)
-                    percentage_of_problematic_generations.append(len(problematic_generations_df) / len(predictions_df))
+                    percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
                     with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
                         f.write(text_report)
                     problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
