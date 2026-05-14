@@ -30,8 +30,3 @@ def load_model(model_path: str, device: torch.device):
         tokenizer.pad_token = tokenizer.eos_token
     model.generation_config.pad_token_id = tokenizer.pad_token_id
     return model, tokenizer
-    # return transformers.AutoModelForSequenceClassification.from_pretrained(
-    #     model_path,
-    #     cache_dir=CACHE_DIR,
-    #     token=token,
-    # )

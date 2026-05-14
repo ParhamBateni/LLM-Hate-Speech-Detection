@@ -1,0 +1,60 @@
+{
+  "$description": "Domain template for the Hate Speech Criteria (HSC) aspects, inspired by notes.md and Khurana et al. (2022). Each definition file (e.g. hatecheck.json) should mirror this structure and fill in `selected` (and sub-fields where applicable) using values drawn from the corresponding `domain` lists. Values not foreseen here can be added under an `others` entry.",
+  "aspects": {
+    "target_groups": {
+      "description": "Person or group from a specific protected identity that is considered a potential target of hate speech.",
+      "multi_value": true,
+      "open_domain": true,
+      "domain": [
+        "gender",
+        "sex",
+        "gender_identity",
+        "sexual_orientation",
+        "race",
+        "color",
+        "ethnicity",
+        "nationality",
+        "religion",
+        "disability",
+        "age",
+        "language",
+        "class",
+        "familial_status",
+        "pregnancy"
+      ]
+    },
+    "dominance": {
+      "description": "Are dominant groups also considered alongside non-dominant groups as potential targets?",
+      "enable": {
+        "description": "Whether the definition allows dominant groups to be targets of hate speech.",
+        "multi_value": false,
+        "open_domain": false,
+        "domain": [false, true, "conditional"]
+      },
+      "groups": {
+        "description": "Dominant groups that the definition explicitly mentions as potential targets.",
+        "multi_value": true,
+        "open_domain": true,
+        "domain": ["white_people", "men"]
+      }
+    },
+    "perpetrator_characteristics": {
+      "description": "Which perpetrator characteristics are considered?",
+      "multi_value": true,
+      "open_domain": true,
+      "domain": ["dominance_of_group", "societal_role", "member_of_target_group"]
+    },
+    "explicit_reference": {
+      "description": "Presence of an explicit reference to the target group, related to the target(s) above.",
+      "multi_value": true,
+      "open_domain": false,
+      "domain": ["stereotype", "group_characteristic", "slur"]
+    },
+    "effects_consequences": {
+      "description": "Potential effects or consequences of the utterance that the definition treats as constitutive of hate speech.",
+      "multi_value": true,
+      "open_domain": true,
+      "domain": ["violence", "hate", "discrimination", "insult"]
+    }
+  }
+}

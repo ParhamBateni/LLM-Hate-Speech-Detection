@@ -1,3 +1,5 @@
+hate_speech_criteria_domain: "data/definitions/domain.json"
+
 datasets:
   hatecheck:
     path: "data/HateCheck/extended_hatecheck(in).csv"
@@ -5,15 +7,16 @@ datasets:
     label_column: "label_gold"
     hate_speech_definitions:
       - type: "vanilla"
-        name: "default"
-        text: "Hate speech is any speech that expresses hatred, prejudice, or hostility towards a group of people based on their race, ethnicity, religion, gender, sexual orientation, disability, or other characteristics."
+        name: "hatecheck_vanilla"
+        path: "data/definitions/hatecheck.json"
       # - type: "criteria"
-      #   name: "definition1"
-      #   target_group: "Black people"
-      #   dominance: "White people"
-      #   perpetrator_characteristics: "Black people"
-      #   negative_reference: "Black people"
-      #   potential_consequences: "Black people"
+      #   name: "hatecheck_hsc"
+      #   path: "data/definitions/hatecheck.json"
+      #   include_definition_text: false
+      # - type: "criteria"
+      #   name: "hatecheck_hsc_mixed"
+      #   path: "data/definitions/hatecheck.json"
+      #   include_definition_text: true
     enable: true
 models:
   llama3_2_1b_instruct:
@@ -41,6 +44,7 @@ prompting:
 extra_hate_speech_definitions: {}
 debug_mode: true
 save_predictions: true
+num_generation_retries: 5
 generation:
   seed: 42
   do_sample: true

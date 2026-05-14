@@ -1,0 +1,43 @@
+{
+  "name": "HateCheck",
+  "definition_text": "Hate speech is abuse that is targeted at a protected group or at its members for being a part of that group. Protected groups are defined based on age, disability, gender identity, familial status, pregnancy, race, national or ethnic origins, religion, sex or sexual orientation, drawing on the UK 2010 Equality Act, the US 1964 Civil Rights Act, and the EU Charter of Fundamental Rights.",
+  "aspects": {
+    "target_groups": {
+      "selected": [
+        "age",
+        "disability",
+        "gender_identity",
+        "familial_status",
+        "pregnancy",
+        "race",
+        "ethnicity",
+        "nationality",
+        "religion",
+        "sex",
+        "sexual_orientation"
+      ],
+      "notes": "Specified directly in the HateCheck definition. The test suite itself only operationalises 7 groups: women (gender), trans people (gender identity), gay people (sexual orientation), black people (race), disabled people (disability), Muslims (religion), immigrants (national origin)."
+    },
+    "dominance": {
+      "enable": {
+        "selected": false
+      },
+      "groups": {
+        "selected": []
+      },
+      "notes": "Not addressed by the HateCheck definition. Khurana et al. (2022, Table 1) marks ND as not specified for HateCheck. In the released test cases all target groups happen to be non-dominant."
+    },
+    "perpetrator_characteristics": {
+      "selected": [],
+      "notes": "Not mentioned in the HateCheck definition. Khurana et al. (2022) marks perpetrator as unspecified for HateCheck."
+    },
+    "explicit_reference": {
+      "selected": [],
+      "notes": "Not specified by the HateCheck definition. Khurana et al. (2022) classify HateCheck under 'Other' for explicit reference because the definition does not commit to the standard types (stereotype, group_characteristic, slur), even though the test suite itself separately covers slurs and other forms."
+    },
+    "effects_consequences": {
+      "selected": [],
+      "notes": "Not specified by the HateCheck definition; Khurana et al. (2022) marks effects/consequences as unspecified. The definition only characterises hate speech as 'abuse' targeted at a protected group, without enumerating which consequences (violence, hate, discrimination, insult) qualify."
+    }
+  }
+}
