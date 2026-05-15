@@ -15,8 +15,26 @@ import os
 import shutil
 import random
 import numpy as np
+import gc
 from prompting import ZeroShotPrompting, FewShotPrompting, ChainOfThoughtPrompting, Prompting
 load_dotenv()
+
+
+def _chat_template_rejects_system_role(tokenizer) -> bool:
+    """True when the tokenizer's Jinja chat template errors on ``role: system`` (e.g. Gemma 2 IT)."""
+    ct = getattr(tokenizer, "chat_template", None)
+    return isinstance(ct, str) and "System role not supported" in ct
+
+
+def build_chat_messages(tokenizer, system_prompt: str, user_text: str) -> list:
+    """Build HF-style chat messages; fold system into user when the template has no system role."""
+    if _chat_template_rejects_system_role(tokenizer):
+        return [{"role": "user", "content": f"System: {system_prompt.strip()}\n\nUser: {user_text}"}]
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_text},
+    ]
+
 
 def read_config(config_path: str):
     with open(config_path, "r") as f:
@@ -30,8 +48,8 @@ def seed_everything(seed: int):
         torch.cuda.manual_seed_all(seed)
 
 def calculate_confidence_score(
-    step_logits: torch.Tensor,
-    chosen_token_ids: torch.Tensor,
+    chosen_logits: torch.Tensor,
+    chosen_ids: torch.Tensor,
     excluded_token_ids: Optional[torch.Tensor] = None,
 ) -> float:
     """
@@ -43,29 +61,17 @@ def calculate_confidence_score(
     machinery. With left-padded prompts, prompt padding is not in this slice
     anyway; this mainly drops trailing EOS and any rare special emissions.
     """
-    if step_logits.ndim != 2:
-        raise ValueError("step_logits must be (T, vocab_size).")
-    t_steps = step_logits.shape[0]
-    if t_steps == 0:
-        return float("nan")
-    t_use = min(t_steps, int(chosen_token_ids.shape[0]))
-    if t_use == 0:
-        return float("nan")
-    logits = step_logits[:t_use].float()
-    chosen = chosen_token_ids[:t_use].long()
-    log_probs = torch.log_softmax(logits, dim=-1)
-    idx = torch.arange(t_use, device=log_probs.device)
-    token_logp = log_probs[idx, chosen]
+    log_probs = torch.log_softmax(chosen_logits, dim=-1)
 
-    valid = torch.ones(t_use, dtype=torch.bool, device=log_probs.device)
+    valid = torch.ones(chosen_ids.shape[0], dtype=torch.bool, device=log_probs.device)
     if excluded_token_ids is not None and excluded_token_ids.numel() > 0:
-        ex = excluded_token_ids.to(chosen.device).long()
-        valid &= ~torch.isin(chosen, ex)
+        ex = excluded_token_ids.to(chosen_ids.device).long()
+        valid &= ~torch.isin(chosen_ids, ex)
 
-    if not bool(valid.any()):
+    if not valid.any().item():
         return float("nan")
-    token_logp = token_logp[valid]
-    return np.round(float(torch.exp(token_logp.mean()).item()), 3)
+    log_probs_tokens = log_probs[valid, chosen_ids[valid]]
+    return np.round(float(torch.exp(log_probs_tokens.mean()).item()), 3)
 
 
 def predict(
@@ -77,8 +83,8 @@ def predict(
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
-    num_generation_retries: int = 5,
-    retry_number: int = 1,
+    num_generation_retries: int = 4,
+    retry_number: int = 0,
 
 ):
     generation_config = generation_config or {}
@@ -101,11 +107,7 @@ def predict(
         batch = iterator[start : start + batch_size]
         system_prompt = prompting.build_system_prompt(definition)
         conversations = [
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": item["text"]},
-            ]
-            for item in batch
+            build_chat_messages(tokenizer, system_prompt, item["text"]) for item in batch
         ]
         batch_labels = [item["label"] for item in batch]
         batch_texts = [item["text"] for item in batch]
@@ -159,20 +161,20 @@ def predict(
         for j in range(len(batch)):
             i = start + j
             new_tokens = sequences[j][prompt_len:]
-            line_break_encoded = torch.tensor(tokenizer.encode("\n", add_special_tokens=False))
-            line_break_index = 0
+            prediction_tag_encoded = torch.tensor(tokenizer.encode("PREDICTION:", add_special_tokens=False))
+            prediction_token_index = len(prediction_tag_encoded)
             for k in range(len(new_tokens)-1, 0, -1):
                 found = True
-                for l in range(len(line_break_encoded)):
-                    if new_tokens[k-l] != line_break_encoded[l]:
+                for l in range(len(prediction_tag_encoded)):
+                    if new_tokens[k-l] != prediction_tag_encoded[l]:
                         found = False
                         break
                 if found:
-                    line_break_index = k
+                    prediction_token_index = k + len(prediction_tag_encoded)
                     break
 
-            _meta = tokenizer.decode(new_tokens[:line_break_index], skip_special_tokens=True).strip().lower()
-            prediction = tokenizer.decode(new_tokens[line_break_index:], skip_special_tokens=True).strip().lower()
+            _meta = tokenizer.decode(new_tokens[:prediction_token_index], skip_special_tokens=True).strip().lower()
+            prediction = tokenizer.decode(new_tokens[prediction_token_index:], skip_special_tokens=True).strip().lower()
             answer = None
             if prediction == "non-hateful" or prediction.startswith("non-hateful"):
                 answer = "non-hateful"
@@ -182,15 +184,14 @@ def predict(
                 answer = "non-hateful"
             elif prediction in ("hate speech", "hate-speech"):
                 answer = "hateful"
-
             if answer is None:
-                problematic_generations.append({"index": i, "text": batch_texts[j], "answer": prediction, "label": batch_labels[j]})
+                index = batch['index'] if 'index' in batch else i
+                problematic_generations.append({"index": index, "text": batch_texts[j], "answer": tokenizer.decode(new_tokens[prediction_token_index:], skip_special_tokens=False), "label": batch_labels[j]})
                 continue
 
-            chosen_ids = sequences[j, prompt_len + line_break_index:]
             confidence_score = calculate_confidence_score(
-                scores[j],
-                chosen_ids,
+                scores[j][prediction_token_index:,:],
+                sequences[j,prompt_len + prediction_token_index:],
                 excluded_token_ids=special_ids if special_ids.numel() else None,
             )
             predictions.append(answer)
@@ -276,16 +277,16 @@ if __name__ == "__main__":
     print("Datasets loaded")
     print(*[f"{dataset.name}: {dataset.dataset.num_rows}" for dataset in datasets_list])
 
-    models = {}
+    model_paths = {}
     for model_name in tqdm(config["models"], "Loading models"):
         try:
-            models[model_name] = load_model(config["models"][model_name]["path"], DEVICE)
+            model_paths[model_name] = config["models"][model_name]["path"]
         except Exception as e:
             print(f"Error loading model {model_name}: {e}")
             continue
     
-    print("Models loaded")
-    print(*[f"{name}: {model[0]}" for name, model in models.items()])
+    print("Models paths:")
+    print(*[f"{name}: {model_paths[name]}" for name in model_paths])
 
     prompting = []
     for prompting_config in config["prompting"]:
@@ -317,13 +318,13 @@ if __name__ == "__main__":
     definition_names = []
     macro_f1_scores = []
     percentage_of_problematic_generations = []
-    total_num_experiments = len(datasets_list) * len(models) * len(prompting) * sum([len(dataset.hate_speech_definitions) for dataset in datasets_list]) + len(extra_definitions)
+    total_num_experiments = len(datasets_list) * len(model_paths) * len(prompting) * sum([len(dataset.hate_speech_definitions) for dataset in datasets_list]) + len(extra_definitions)
     print(f"Total number of experiments: {total_num_experiments}\n")
     num_experiments_completed = 0
-    for dataset in datasets_list:
-        for model in models:
-            current_model, current_tokenizer = models[model]
-            model_name = getattr(current_model, "name_or_path", "model").replace("/", "_")
+    for model_path in model_paths:
+        current_model, current_tokenizer = load_model(model_paths[model_path], DEVICE)
+        for dataset in datasets_list:
+            model_name = model_path.replace("/", "_")
             for prompting_method in prompting:
                 for definition in dataset.hate_speech_definitions + extra_definitions:
                     experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
@@ -374,6 +375,14 @@ if __name__ == "__main__":
                     if config["save_predictions"]:
                         predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
                     num_experiments_completed += 1
+
+
+        del current_model, current_tokenizer
+        gc.collect()
+        if DEVICE.type == "cuda":
+            torch.cuda.empty_cache()
+        elif DEVICE.type == "mps":
+            torch.mps.empty_cache()
 
     pd.DataFrame(
         {

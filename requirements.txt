@@ -1,8 +1,7 @@
 huggingface-hub
 transformers
 datasets
-accelerate
-# torch
+torch
 numpy
 pandas
 scikit-learn
