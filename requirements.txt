@@ -1,5 +1,6 @@
 huggingface-hub
 transformers
+sentence-transformers
 datasets
 torch
 numpy

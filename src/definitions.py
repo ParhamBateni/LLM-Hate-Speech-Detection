@@ -270,7 +270,9 @@ class VanillaHateSpeechDefinition(HateSpeechDefinition):
         return VanillaHateSpeechDefinition(name, definition_text)
 
     def prompt_text(self) -> str:
-        return "Reference plain-text definition: " + self._definition_text
+        if self._definition_text:
+            return "Reference plain-text definition: " + self._definition_text
+        return ""
 
     @staticmethod
     def TYPE() -> str:
