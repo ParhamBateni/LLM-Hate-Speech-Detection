@@ -1,5 +1,5 @@
 import datasets
-from typing import List
+from typing import List, Optional
 from definitions import HateSpeechDefinition
 
 def _load_raw_dataset(dataset_path: str):
@@ -11,10 +11,25 @@ def _load_raw_dataset(dataset_path: str):
     else:
         return datasets.load_dataset(dataset_path)
 
-def _rename_columns(dataset: datasets.Dataset, text_column: str, label_column: str):
-    """Rename text and label columns to standardized names."""
-    dataset = dataset.rename_column(text_column, "text")
-    dataset = dataset.rename_column(label_column, "label")
+def _train_split(dataset):
+    """Return the train split if present, otherwise the dataset itself."""
+    if hasattr(dataset, "keys") and "train" in dataset:
+        return dataset["train"]
+    return dataset
+
+def _rename_columns(
+    dataset: datasets.Dataset,
+    text_column: str,
+    label_column: str,
+    id_column: Optional[str] = None,
+) -> datasets.Dataset:
+    """Rename text, label, and id columns to standardized names."""
+    if text_column != "text":
+        dataset = dataset.rename_column(text_column, "text")
+    if label_column != "label":
+        dataset = dataset.rename_column(label_column, "label")
+    if id_column and id_column != "id":
+        dataset = dataset.rename_column(id_column, "id")
     return dataset
 
 class HateSpeechDataset:
@@ -46,8 +61,16 @@ class HateSpeechDataset:
             raise AttributeError("Underlying dataset is not iterable.")
 
     @staticmethod
-    def load_dataset(name: str, dataset_path: str, text_column: str, label_column: str, hate_speech_definitions: List[HateSpeechDefinition]) -> "HateSpeechDataset":
+    def load_dataset(
+        name: str,
+        dataset_path: str,
+        text_column: str,
+        label_column: str,
+        hate_speech_definitions: List[HateSpeechDefinition],
+        id_column: Optional[str] = None,
+    ) -> "HateSpeechDataset":
         """Safely load a dataset and wrap it in a HateSpeechDataset with the provided definition."""
         raw_dataset = _load_raw_dataset(dataset_path)
-        processed_dataset = _rename_columns(raw_dataset, text_column, label_column)
+        split = _train_split(raw_dataset)
+        processed_dataset = _rename_columns(split, text_column, label_column, id_column)
         return HateSpeechDataset(name, processed_dataset, hate_speech_definitions)

@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from typing import Optional, Sequence
 
 import datasets
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 import torch
 import pandas as pd
 import time
@@ -60,42 +60,51 @@ def calculate_confidence_score(
     return np.round(float(torch.exp(log_probs_tokens.mean()).item()), 3)
 
 
-def _rfind_subsequence(haystack: torch.Tensor, needle: torch.Tensor) -> Optional[int]:
-    """Last start index of ``needle`` in ``haystack``, or ``None``."""
-    n = needle.numel()
-    if n == 0 or haystack.numel() < n:
-        return None
-    for k in range(haystack.numel() - n, -1, -1):
-        if torch.all(haystack[k : k + n] == needle):
-            return k
-    return None
-
-
 def _prediction_start_after_tags(new_tokens: torch.Tensor, tag_tensors: Sequence[torch.Tensor]) -> Optional[int]:
     """Index of first token *after* a recognized PREDICTION marker, or ``None``."""
     for tag in tag_tensors:
-        k = _rfind_subsequence(new_tokens, tag)
-        if k is not None:
-            return k + tag.numel()
+        n = tag.numel()
+        if n == 0 or new_tokens.numel() < n:
+            continue
+        for k in range(new_tokens.numel() - n, -1, -1):
+            if torch.all(new_tokens[k : k + n] == tag):
+                return k + n
     return None
 
 
-def _normalize_prediction_label(prediction: str) -> Optional[str]:
-    p = prediction.strip().lower()
-    if p == "non-hateful" or p.startswith("non-hateful"):
-        return "non-hateful"
-    if p == "hateful" or p.startswith("hateful"):
-        return "hateful"
-    if p in ("non hateful", "not hate speech", "not hate-speech"):
-        return "non-hateful"
-    if p in ("hate speech", "hate-speech"):
-        return "hateful"
-    return None
+CLASS_LABELS = ["non-hateful", "hateful"]
 
 
-def _maybe_cuda_empty_cache():
-    if DEVICE.type == "cuda":
-        torch.cuda.empty_cache()
+def _experiment_timing(
+    experiment_number: int, total_experiments: int, start_time: float
+) -> tuple[str, str]:
+    """Return elapsed and estimated remaining time as H:MM:SS strings."""
+    elapsed = time.time() - start_time
+    completed = experiment_number - 1
+    remaining_secs = (
+        (elapsed / completed) * (total_experiments - experiment_number + 1)
+        if completed > 0
+        else 0.0
+    )
+
+    def fmt(seconds: float) -> str:
+        total = max(0, int(seconds))
+        hours, rem = divmod(total, 3600)
+        minutes, secs = divmod(rem, 60)
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+
+    return fmt(elapsed), fmt(remaining_secs)
+
+
+def save_confusion_matrix(y_true, y_pred, path_csv: str, path_txt: str):
+    cm = confusion_matrix(y_true, y_pred, labels=CLASS_LABELS)
+    cm_df = pd.DataFrame(cm, index=CLASS_LABELS, columns=CLASS_LABELS)
+    cm_df.index.name = "label"
+    cm_df.to_csv(path_csv)
+    with open(path_txt, "w") as f:
+        f.write("Confusion matrix (rows=true, cols=predicted)\n\n")
+        f.write(cm_df.to_string())
+        f.write("\n")
 
 
 def predict(
@@ -119,6 +128,7 @@ def predict(
     predictions = []
     confidence_scores = []
     labels = []
+    sample_ids = []
     problematic_generations = []
     iterator = list(dataset)
     if num_batches == 1e9:
@@ -135,7 +145,13 @@ def predict(
         for prefix in ("PREDICTION:", "\n\nPREDICTION:", "\nPREDICTION:")
     ]
 
-    for start in tqdm(range(0, num_samples, batch_size), desc=f"Predicting (Attempt {retry_number} of {num_generation_retries})..."):
+    num_predict_batches = (num_samples + batch_size - 1) // batch_size
+    for start in tqdm(
+        range(0, num_samples, batch_size),
+        desc=f"Predicting (Attempt {retry_number} of {num_generation_retries})",
+        total=num_predict_batches,
+        miniters=10,
+    ):
         batch = iterator[start : start + batch_size]
         conversations = [
             build_chat_messages(tokenizer, system_prompt, item["text"]) for item in batch
@@ -179,12 +195,13 @@ def predict(
         sequences = outputs.sequences.detach().cpu()
         scores = torch.stack([s.detach().cpu() for s in outputs.scores], dim=1)
         del outputs, inputs
-        _maybe_cuda_empty_cache()
+        if DEVICE.type == "cuda":
+            torch.cuda.empty_cache()
 
         for j in range(len(batch)):
             i = start + j
             row = batch[j]
-            row_index = row["index"] if isinstance(row, dict) and "index" in row else i
+            row_id = row["id"] if isinstance(row, dict) and "id" in row else i
             new_tokens = sequences[j][prompt_len:]
 
             pred_start = _prediction_start_after_tags(new_tokens, prediction_tag_tensors)
@@ -195,7 +212,7 @@ def predict(
                 if pred_start is None:
                     problematic_generations.append(
                         {
-                            "index": row_index,
+                            "id": row_id,
                             "text": batch_texts[j],
                             "answer": tokenizer.decode(new_tokens, skip_special_tokens=False),
                             "label": batch_labels[j],
@@ -204,11 +221,21 @@ def predict(
                     continue
 
             prediction = tokenizer.decode(new_tokens[pred_start:], skip_special_tokens=True).strip().lower()
-            answer = _normalize_prediction_label(prediction)
+            p = prediction
+            if p == "non-hateful" or p.startswith("non-hateful"):
+                answer = "non-hateful"
+            elif p == "hateful" or p.startswith("hateful"):
+                answer = "hateful"
+            elif p in ("non hateful", "not hate speech", "not hate-speech"):
+                answer = "non-hateful"
+            elif p in ("hate speech", "hate-speech"):
+                answer = "hateful"
+            else:
+                answer = None
             if answer is None:
                 problematic_generations.append(
                     {
-                        "index": row_index,
+                        "id": row_id,
                         "text": batch_texts[j],
                         "answer": tokenizer.decode(new_tokens, skip_special_tokens=False),
                         "label": batch_labels[j],
@@ -225,9 +252,11 @@ def predict(
             confidence_scores.append(confidence_score)
             texts.append(batch_texts[j])
             labels.append(batch_labels[j])
+            sample_ids.append(row_id)
 
     predictions_df = pd.DataFrame(
         {
+            "id": sample_ids,
             "text": texts,
             "prediction": predictions,
             "confidence_score": confidence_scores,
@@ -236,7 +265,13 @@ def predict(
         }
     )
     problematic_generations_df = pd.DataFrame(problematic_generations)
-    if len(problematic_generations) > 0 and retry_number < num_generation_retries and generation_config.get("do_sample", True):
+    if len(problematic_generations) > 0 and retry_number < num_generation_retries:
+        # Enabling sampling so that the model can generate more diverse responses which might help in generating the correct format of the response
+        generation_config["do_sample"] = True
+        if generation_config.get("temperature") is None or generation_config["temperature"] == 0.0:
+            generation_config["temperature"] = 0.8
+        if generation_config.get("top_p") is None or generation_config["top_p"] == 1.0:
+            generation_config["top_p"] = 0.9
         predictions_df2, problematic_generations_df2 = predict(
             datasets.Dataset.from_pandas(problematic_generations_df),
             model,
@@ -285,7 +320,7 @@ if __name__ == "__main__":
             print(f"Error loading domain from {domain_path}: {e}")
 
     datasets_list = []
-    for dataset_name in tqdm(config["datasets"], "Loading datasets"):
+    for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
         for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"]:
             try:
@@ -295,8 +330,17 @@ if __name__ == "__main__":
                 continue
             definitions.append(definition)
         try:
-            # datasets_list.append(HateSpeechDataset("problematic", datasets.load_dataset("csv", data_files="data/problematic_generations.csv"), definitions))
-            datasets_list.append(HateSpeechDataset.load_dataset(dataset_name, config["datasets"][dataset_name]["path"], config["datasets"][dataset_name]["text_column"], config["datasets"][dataset_name]["label_column"], definitions))
+            ds_cfg = config["datasets"][dataset_name]
+            datasets_list.append(
+                HateSpeechDataset.load_dataset(
+                    dataset_name,
+                    ds_cfg["path"],
+                    ds_cfg["text_column"],
+                    ds_cfg["label_column"],
+                    definitions,
+                    id_column=ds_cfg.get("id_column"),
+                )
+            )
         except Exception as e:
             print(f"Error loading dataset {dataset_name}: {e}")
             continue
@@ -304,7 +348,7 @@ if __name__ == "__main__":
     print(*[f"{dataset.name}: {dataset.dataset.num_rows}" for dataset in datasets_list])
 
     model_paths = {}
-    for model_name in tqdm(config["models"], "Locating models paths"):
+    for model_name in tqdm(config["models"], desc="Locating models paths"):
         try:
             model_paths[model_name] = config["models"][model_name]["path"]
         except Exception as e:
@@ -348,9 +392,10 @@ if __name__ == "__main__":
     definition_names = []
     macro_f1_scores = []
     percentage_of_problematic_generations = []
-    total_num_experiments = len(datasets_list) * len(model_paths) * len(prompting) * (sum([len(dataset.hate_speech_definitions) for dataset in datasets_list]) + len(extra_definitions))
+    total_num_experiments = len(model_paths) * len(prompting) * (sum([len(dataset.hate_speech_definitions) + len(extra_definitions) for dataset in datasets_list]))
     print(f"Total number of experiments: {total_num_experiments}\n")
     experiment_number = 1
+    start_time = time.time()
     for model_path in model_paths:
         current_model, current_tokenizer = load_model(model_paths[model_path], DEVICE)
         for dataset in datasets_list:
@@ -360,7 +405,17 @@ if __name__ == "__main__":
                     experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
                     os.makedirs(experiment_folder)
                     print("-" * 100)
-                    print(f"Running experiment {experiment_number}/{total_num_experiments}:\nmodel: {model_name}\ndataset: {dataset.name}\ndefinition: {definition.name}\nprompting: {prompting_method.name}\n")
+                    elapsed_fmt, remaining_fmt = _experiment_timing(
+                        experiment_number, total_num_experiments, start_time
+                    )
+                    print(
+                        f"Running experiment {experiment_number}/{total_num_experiments}:\n"
+                        f"Time passed: {elapsed_fmt}, Time remaining (est.): {remaining_fmt}\n"
+                        f"model: {model_name}\n"
+                        f"dataset: {dataset.name}\n"
+                        f"definition: {definition.name}\n"
+                        f"prompting: {prompting_method.name}\n"
+                    )
 
                     if isinstance(prompting_method, FewShotPrompting): 
                         system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)])
@@ -406,6 +461,12 @@ if __name__ == "__main__":
                     percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
                     with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
                         f.write(text_report)
+                    save_confusion_matrix(
+                        predictions_df["label"],
+                        predictions_df["prediction"],
+                        os.path.join(experiment_folder, "confusion_matrix.csv"),
+                        os.path.join(experiment_folder, "confusion_matrix.txt"),
+                    )
                     if config["save_predictions"]:
                         predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
                     experiment_number += 1

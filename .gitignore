@@ -7,3 +7,4 @@ runs/
 */__pycache__/
 .hf_home
 .venv-backups/
+logs/

@@ -7,8 +7,8 @@ def _chat_template_rejects_system_role(tokenizer) -> bool:
 def build_chat_messages(tokenizer, system_prompt: str, user_text: str) -> list:
     """Build HF-style chat messages; fold system into user when the template has no system role."""
     if _chat_template_rejects_system_role(tokenizer):
-        return [{"role": "user", "content": f"System: {system_prompt.strip()}\n\nUser: {user_text}"}]
+        return [{"role": "user", "content": f"System:\n{system_prompt.strip()}\n\nUser:\nQUERY: {user_text}"}]
     return [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_text},
+        {"role": "user", "content": f"QUERY: {user_text}"},
     ]
