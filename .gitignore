@@ -5,3 +5,5 @@ cache
 runs/
 *.sql
 */__pycache__/
+.hf_home
+.venv-backups/

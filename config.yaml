@@ -2,47 +2,73 @@ hate_speech_criteria_domain: "data/definitions/domain.json"
 
 datasets:
   hatecheck:
-    path: "data/HateCheck/extended_hatecheck(in).csv"
+    path: "data/datasets/HateCheck/extended_hatecheck(in).csv"
     text_column: "test_case"
     label_column: "label_gold"
     hate_speech_definitions:
       - type: "vanilla"
         name: "hatecheck_vanilla"
         path: "data/definitions/hatecheck.json"
-      # - type: "criteria"
-      #   name: "hatecheck_hsc"
-      #   path: "data/definitions/hatecheck.json"
-      #   include_definition_text: false
-      # - type: "criteria"
-      #   name: "hatecheck_hsc_mixed"
-      #   path: "data/definitions/hatecheck.json"
-      #   include_definition_text: true
+      - type: "criteria"
+        name: "hatecheck_hsc"
+        path: "data/definitions/hatecheck.json"
+        include_definition_text: false
+      - type: "criteria"
+        name: "hatecheck_hsc_mixed"
+        path: "data/definitions/hatecheck.json"
+        include_definition_text: true
+
 models:
-  llama3_2_1b_instruct:
-    path: "meta-llama/Llama-3.2-1B-Instruct"
-  # llama3_1_8b_instruct:
-  #   path: "meta-llama/Meta-Llama-3.1-8B-Instruct"
-  # mistral_7b_instruct:
-  #   path: "mistralai/Mistral-7B-Instruct"
-  # flan_t5_small:
-  #   path: "google/flan-t5-small"
+  lama3_2_3b_instruct:
+    path: "meta-llama/Llama-3.2-3B-Instruct"
+  gemma2_2b_it:
+    path: "google/gemma-2-2b-it"
+  phi3_mini:
+    path: "microsoft/Phi-3-mini-4k-instruct"
+  qwen2_5_3b_instruct:
+    path: "Qwen/Qwen2.5-3B-Instruct"
+
 prompting:
   - type: "zero-shot"
-  # - type: "few-shot"
-  #   num_shots: 5
-  #   few_shot_mode: "random"
-  # - type: "few-shot"
-  #   num_shots: 5
-  #   few_shot_mode: "smart"
-  # - type: "chain-of-thought"
+    name: "zero-shot-no-reasoning"
+    reasoning_enabled: false
+  - type: "zero-shot"
+    name: "zero-shot-reasoning"
+    reasoning_enabled: true
+  - type: "few-shot"
+    name: "few-shot-smart-no-reasoning"
+    reasoning_enabled: false
+    num_shots: 10
+    few_shot_mode: "smart"
+    embedding_model_path: "BAAI/bge-small-en-v1.5"
+  - type: "few-shot"
+    name: "few-shot-smart-reasoning"
+    reasoning_enabled: true
+    num_shots: 10
+    few_shot_mode: "smart"
+    embedding_model_path: "BAAI/bge-small-en-v1.5"
+  - type: "few-shot"
+    name: "few-shot-random-no-reasoning"
+    reasoning_enabled: false
+    num_shots: 10
+    few_shot_mode: "random"
+  - type: "few-shot"
+    name: "few-shot-random-reasoning"
+    reasoning_enabled: true
+    num_shots: 10
+    few_shot_mode: "random"
 
-extra_hate_speech_definitions: {}
-debug_mode: false
+extra_hate_speech_definitions:
+  - type: "vanilla"
+    name: "no_definition"
+    definition_text: ""
+
+debug_mode: true
 save_predictions: true
-num_generation_retries: 5
+num_generation_retries: 4
 generation:
   seed: 42
-  do_sample: true
-  max_new_tokens: 100
-  temperature: 0.7
-  top_p: 0.9
+  do_sample: false
+  max_new_tokens: 200
+  temperature: 0.0
+  top_p: 1.0
