@@ -1,0 +1,37 @@
+{
+  "name": "HateXplain",
+  "definition_text": "Hate speech is language that is used to expresses hatred towards a targeted group or is intended to be derogatory, to humiliate, or to insult the members of the group. In extreme cases this may also be language that threatens or incites violence. Importantly, this definition does not include all instances of offensive language.",
+  "aspects": {
+    "target_groups": {
+      "selected": [
+        "race",
+        "religion",
+        "gender",
+        "sexual_orientation",
+        "immigration_status"
+      ],
+      "notes": "Khurana et al. (2022, Table 1, T ✓): target groups are specified for Mathew et al. (2021). Khurana et al. (2022, Appendix A) list coverage as gender, race, religion, and sexual orientation. Mathew et al. (2021, Table 3) operationalise targets under Race, Religion, Gender, Sexual Orientation, and Miscellaneous (e.g. Refugee/Immigrant, Indigenous); finer communities (African, Caucasian, Islam, LGBTQ, Women, etc.) appear in the dataset but are not separate HSC domain entries. Immigration status is not specified in the definition text but it is included here to include refugee and immigrant targets."
+    },
+    "dominance": {
+      "enable": {
+        "selected": true
+      },
+      "groups": {
+        "selected": []
+      },
+      "notes": "Khurana et al. (2022, Table 1, ND ‘−’): Mathew et al. (2021) are the only dataset in Table 1 marked ‘−’, meaning the definition is explicit about not restricting hate speech targets to non-dominant groups only (§4). Khurana et al. (2022, §4) note that Caucasian is listed as a target community. Mathew et al. (2021, Table 3) include Caucasian under Race and Men under Gender."
+    },
+    "perpetrator_characteristics": {
+      "selected": [],
+      "notes": "Khurana et al. (2022, Table 1, P ✗): perpetrator characteristics are not specified in the definition. Mathew et al. (2021) do not include speaker or perpetrator criteria in the annotation guidelines described in the paper."
+    },
+    "explicit_reference": {
+      "selected": [],
+      "notes": "Khurana et al. (2022, Table 1, Explicit Ref ✗): the definition does not specify whether hate speech must include a stereotype, group characteristic, or slur (cf. §3.4). Mathew et al. (2021) ask annotators to highlight rationale spans for hateful or offensive labels but do not require the three reference types from Khurana et al. (2022, §3.4) in the class definitions."
+    },
+    "effects_consequences": {
+      "selected": [],
+      "notes": "Khurana et al. (2022, Table 1, Effects ✗): potential consequences (e.g. incitement of hate, violence, discrimination; §3.5) are not specified in the definition. Mathew et al. (2021) use a three-way class label (hateful / offensive / normal) rather than separate consequence dimensions; they adopt the class scheme from Davidson et al. (2017) without restating which effects qualify as hate speech."
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "name": "MHS",
+  "definition_text": "Hate speech is bias-motivated, hostile and malicious language targeted at a person or group because of their actual or perceived innate characteristics, especially when the group is unnecessarily labeled.",
+  "aspects": {
+    "target_groups": {
+      "selected": [
+        "race",
+        "ethnicity",
+        "religion",
+        "nationality",
+        "gender",
+        "gender_identity",
+        "sexual_orientation",
+        "age",
+        "disability",
+        "political_identity"
+      ],
+      "notes": "Sachdeva et al. (2022) is not listed in Khurana et al. (2022, Table 1); aspect values below follow the HSC coding scheme (Table 1 legend; §3.1–3.5) applied to the MHS definition. Khurana et al. (2022, T ✓): target groups are specified in the definition. Sachdeva et al. (2022, §4.3) ask whether a comment targets race/ethnicity, religion, national origin or citizenship status, gender, sexual orientation, age, disability status, or political identity; Appendix B, Table 2 lists identity subgroups. The construct draws on US hate-crime protected categories (Kennedy et al., 2020, §3.1, as summarised in Sachdeva et al., 2022): race, religion, ethnicity, nationality, gender, sexual orientation, gender identity, and disability. Political identity is annotated in MHS but is outside the HSC domain template; it is noted here only."
+    },
+    "dominance": {
+      "enable": {
+        "selected": true
+      },
+      "groups": {
+        "selected": []
+      },
+      "notes": "Khurana et al. (2022, Table 1, ND ‘−’): the definition explicitly does not restrict targets to non-dominant groups only (same coding as Mathew et al., 2021). Kennedy et al. (2020, §3.1, via Sachdeva et al., 2022) include both subjugated groups and power-dominant groups among protected categories. Sachdeva et al. (2022) does not add a separate dominance rule in the benchmark hate-speech label (Appendix A, Table 1)."
+    },
+    "perpetrator_characteristics": {
+      "selected": [],
+      "notes": "Khurana et al. (2022, Table 1, P ✗): perpetrator characteristics are not specified in the definition. Sachdeva et al. (2022, §4.4) collect annotator demographics for perspective analysis (Rasch severity), not as a hate-speech criterion in the labeling instrument."
+    },
+    "explicit_reference": {
+      "selected": [
+        "stereotype",
+        "group_characteristic",
+        "slur"
+      ],
+      "notes": "Khurana et al. (2022, Table 1, Kennedy et al., 2022): explicit reference is specified as slur, group characteristics, and stereotypes—the three standard types in §3.4. Sachdeva et al. (2022, Table 1) survey items operationalise these: insult and humiliation toward named targets; inferior/superior status (group characteristics); dehumanization (e.g. comparing a group to animals, stereotype); slurs appear frequently in annotated rationales (§4.1). The Appendix A hate-speech benchmark item requires innate characteristics and group labeling but does not name the three reference types separately."
+    },
+    "effects_consequences": {
+      "selected": [
+        "hate",
+        "violence"
+      ],
+      "notes": "Khurana et al. (2022, Table 1): effects are listed when the definition specifies incitement of violence and/or hate (§3.5). Sachdeva et al. (2022, §3.1) ties hateful speech to the dangerous-speech framework and individual or collective violence; §3.3 places genocide and violence on the hatefulness spectrum. Table 1 survey items measure disrespect, insult, humiliation, status, dehumanization, violence, genocide, and attack/defend. Discrimination is not named in the benchmark hate-speech item (Appendix A, Table 1) and is omitted here following Khurana et al. (2022, §3.5)."
+    }
+  }
+}

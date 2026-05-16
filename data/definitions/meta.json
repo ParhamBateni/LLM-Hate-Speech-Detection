@@ -1,0 +1,53 @@
+{
+  "name": "Meta",
+  "definition_text": "Hateful conduct is direct attacks against people rather than concepts or institutions, on the basis of protected characteristics: race, ethnicity, national origin, disability, religious affiliation, caste, sexual orientation, sex, gender identity, and serious disease.",
+  "aspects": {
+    "target_groups": {
+      "selected": [
+        "race",
+        "ethnicity",
+        "nationality",
+        "disability",
+        "religion",
+        "class",
+        "sexual_orientation",
+        "sex",
+        "gender_identity",
+        "age"
+      ],
+      "notes": "Protected characteristics (PCs) are enumerated in the hateful-conduct policy. Age counts as a PC only when referenced together with another PC. Refugees, migrants, immigrants, and asylum seekers receive heightened protection against the most severe (Tier 1) attacks; commentary on immigration policy is permitted. Non-protected characteristics (e.g. occupation) gain protection when referenced together with a PC. Certain words or phrases may be treated as proxies for PCs depending on local context. Serious disease is a named PC but is outside the HSC domain template; it is noted here only."
+    },
+    "dominance": {
+      "enable": {
+        "selected": false
+      },
+      "groups": {
+        "selected": []
+      },
+      "notes": "The policy does not state whether dominant groups may be targets of hateful conduct; protection is framed solely in terms of attacks against people on the basis of protected characteristics."
+    },
+    "perpetrator_characteristics": {
+      "selected": [
+        "member_of_target_group"
+      ],
+      "notes": "Speaker role and intention matter: slurs or others’ hateful speech may be allowed when used to condemn or report the speech, or when used self-referentially or in an empowering way with clear intent; where intent is unclear, content may be removed. Sex- or gender-exclusive language and insults in specific contexts (e.g. facility access, political or religious debate, romantic disputes) may be permitted under carve-outs."
+    },
+    "explicit_reference": {
+      "selected": [
+        "slur",
+        "stereotype",
+        "group_characteristic"
+      ],
+      "notes": "Removed content includes dehumanizing speech, slurs, harmful stereotypes (dehumanizing comparisons historically used to attack, intimidate, or exclude groups, often linked to offline violence), allegations of serious immorality or criminality, and other group-directed attacks. Stereotypes and group characteristics are distinguished in the HSC schema; Meta’s ‘harmful stereotypes’ are defined as a subtype of dehumanizing comparison."
+    },
+    "effects_consequences": {
+      "selected": [
+        "hate",
+        "discrimination",
+        "violence",
+        "group_insult"
+      ],
+      "notes": "Tiered severity (Tier 1 and below) applies to removed speech. Consequences include incitement of hate, discrimination, and violence, as well as serious insults, expressions of contempt or disgust, cursing, and calls for exclusion or segregation when directed at people on the basis of protected characteristics."
+    }
+  }
+}

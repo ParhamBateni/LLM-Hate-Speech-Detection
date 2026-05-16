@@ -35,7 +35,7 @@
         "description": "Dominant groups that the definition explicitly mentions as potential targets.",
         "multi_value": true,
         "open_domain": true,
-        "domain": ["white_people", "men"]
+        "domain": ["white_people", "men", "others"]
       }
     },
     "perpetrator_characteristics": {
@@ -54,7 +54,7 @@
       "description": "Potential effects or consequences of the utterance that the definition treats as constitutive of hate speech.",
       "multi_value": true,
       "open_domain": true,
-      "domain": ["violence", "hate", "discrimination", "insult"]
+      "domain": ["violence", "hate", "discrimination", "group_insult"]
     }
   }
 }
