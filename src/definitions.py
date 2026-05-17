@@ -194,8 +194,14 @@ class HateSpeechDefinition(ABC):
     :meth:`load_definition`.
     """
 
-    def __init__(self, name: str):
+    def __init__(self, name: str, null_baseline: bool = False):
         self._name = name
+        self._null_baseline = null_baseline
+
+    @property
+    def null_baseline(self) -> bool:
+        """If True, prompts use a minimal classifier baseline (no HSC / jailbreak framing)."""
+        return self._null_baseline
 
     @staticmethod
     def load_definition(definition_spec: dict[str, Any], domain: Optional[Domain] = None) -> "HateSpeechDefinition":
@@ -216,17 +222,16 @@ class HateSpeechDefinition(ABC):
 
         definition_type = definition_config.get("type") or definition_spec.get("type")
         if definition_type == VanillaHateSpeechDefinition.TYPE():
+            if "null_baseline" in definition_spec:
+                definition_config["null_baseline"] = definition_spec["null_baseline"]
             return VanillaHateSpeechDefinition._load_definition(definition_config)
         if definition_type == CriteriaHateSpeechDefinition.TYPE():
             include_definition_text = definition_spec.get("include_definition_text", False)
             return CriteriaHateSpeechDefinition._load_definition(definition_config, domain=domain, include_definition_text=include_definition_text)
-        # if definition_type == MixedHateSpeechDefinition.TYPE():
-        #     return MixedHateSpeechDefinition._load_definition(definition_config, domain=domain)
         raise ValueError(
             f"Invalid hate speech definition type: {definition_type!r}. Expected one of: "
             f"{VanillaHateSpeechDefinition.TYPE()!r}, "
             f"{CriteriaHateSpeechDefinition.TYPE()!r}, "
-            # f"{MixedHateSpeechDefinition.TYPE()!r}."
         )
 
     @staticmethod
@@ -251,8 +256,8 @@ class HateSpeechDefinition(ABC):
 class VanillaHateSpeechDefinition(HateSpeechDefinition):
     """A plain-text hate speech definition."""
 
-    def __init__(self, name: str, definition_text: str):
-        super().__init__(name)
+    def __init__(self, name: str, definition_text: str, null_baseline: bool = False):
+        super().__init__(name, null_baseline=null_baseline)
         self._definition_text = definition_text
 
     @staticmethod
@@ -267,7 +272,8 @@ class VanillaHateSpeechDefinition(HateSpeechDefinition):
                 "Expected keys: ['name', 'definition_text'].\n"
                 f"Offending config: {definition_config}"
             ) from e
-        return VanillaHateSpeechDefinition(name, definition_text)
+        null_baseline = bool(definition_config.get("null_baseline", False))
+        return VanillaHateSpeechDefinition(name, definition_text, null_baseline=null_baseline)
 
     def prompt_text(self) -> str:
         if self._definition_text:
@@ -295,7 +301,7 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         aspects: dict,
         definition_text: Optional[str] = None,
     ):
-        super().__init__(name)
+        super().__init__(name, null_baseline=False)
         self._domain = domain
         self._aspects = aspects
         self._definition_text = definition_text

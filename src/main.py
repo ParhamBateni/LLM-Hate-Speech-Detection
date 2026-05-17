@@ -16,7 +16,7 @@ import shutil
 import random
 import numpy as np
 import gc
-from prompting import ZeroShotPrompting, FewShotPrompting
+from prompting import ZeroShotPrompting, FewShotPrompting, user_completion_nudge
 from chat_utils import build_chat_messages
 from model_utils import load_embedding_model
 load_dotenv()
@@ -96,6 +96,19 @@ def _experiment_timing(
     return fmt(elapsed), fmt(remaining_secs)
 
 
+def definitions_for_dataset(
+    dataset: HateSpeechDataset,
+    extra_definitions: list[tuple[HateSpeechDefinition, dict]],
+) -> list[HateSpeechDefinition]:
+    """Dataset-specific definitions plus extras scoped by ``apply_to_datasets``."""
+    definitions = list(dataset.hate_speech_definitions)
+    for definition, spec in extra_definitions:
+        apply_to = spec.get("apply_to_datasets")
+        if apply_to is None or dataset.name in apply_to:
+            definitions.append(definition)
+    return definitions
+
+# TODO: remove path_csv
 def save_confusion_matrix(y_true, y_pred, path_csv: str, path_txt: str):
     cm = confusion_matrix(y_true, y_pred, labels=CLASS_LABELS)
     cm_df = pd.DataFrame(cm, index=CLASS_LABELS, columns=CLASS_LABELS)
@@ -112,7 +125,8 @@ def predict(
     model,
     tokenizer,
     system_prompt: str,
-    batch_size: int = 4,
+    user_suffix: str = "",
+    batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
     num_generation_retries: int = 4,
@@ -151,10 +165,12 @@ def predict(
         desc=f"Predicting (Attempt {retry_number} of {num_generation_retries})",
         total=num_predict_batches,
         miniters=10,
+        mininterval=0,
     ):
         batch = iterator[start : start + batch_size]
         conversations = [
-            build_chat_messages(tokenizer, system_prompt, item["text"]) for item in batch
+            build_chat_messages(tokenizer, system_prompt, item["text"], user_suffix=user_suffix)
+            for item in batch
         ]
         batch_labels = [item["label"] for item in batch]
         batch_texts = [item["text"] for item in batch]
@@ -277,11 +293,12 @@ def predict(
             model,
             tokenizer,
             system_prompt,
-            batch_size,
-            1e9,
-            generation_config,
-            num_generation_retries,
-            retry_number + 1,
+            user_suffix=user_suffix,
+            batch_size=batch_size,
+            num_batches=1e9,
+            generation_config=generation_config,
+            num_generation_retries=num_generation_retries,
+            retry_number=retry_number + 1,
         )
         predictions_df = pd.concat([predictions_df, predictions_df2])
         problematic_generations_df = problematic_generations_df2
@@ -378,12 +395,14 @@ if __name__ == "__main__":
     print(*[f"{prompting_method.name}" for prompting_method in prompting])
 
 
-    extra_definitions = []
-    for definition in config.get("extra_hate_speech_definitions") or []:
+    extra_definitions: list[tuple[HateSpeechDefinition, dict]] = []
+    for spec in config.get("extra_hate_speech_definitions") or []:
         try:
-            extra_definitions.append(HateSpeechDefinition.load_definition(definition, domain=domain))
+            extra_definitions.append(
+                (HateSpeechDefinition.load_definition(spec, domain=domain), spec)
+            )
         except Exception as e:
-            print(f"Error loading extra definition {definition.get('type')}: {e}")
+            print(f"Error loading extra definition {spec.get('type')}: {e}")
 
     print("-" * 100)
     dataset_names = []
@@ -392,7 +411,9 @@ if __name__ == "__main__":
     definition_names = []
     macro_f1_scores = []
     percentage_of_problematic_generations = []
-    total_num_experiments = len(model_paths) * len(prompting) * (sum([len(dataset.hate_speech_definitions) + len(extra_definitions) for dataset in datasets_list]))
+    total_num_experiments = len(model_paths) * len(prompting) * sum(
+        len(definitions_for_dataset(dataset, extra_definitions)) for dataset in datasets_list
+    )
     print(f"Total number of experiments: {total_num_experiments}\n")
     experiment_number = 1
     start_time = time.time()
@@ -401,7 +422,7 @@ if __name__ == "__main__":
         for dataset in datasets_list:
             model_name = model_path.replace("/", "_")
             for prompting_method in prompting:
-                for definition in dataset.hate_speech_definitions + extra_definitions:
+                for definition in definitions_for_dataset(dataset, extra_definitions):
                     experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
                     os.makedirs(experiment_folder)
                     print("-" * 100)
@@ -424,52 +445,59 @@ if __name__ == "__main__":
 
                     with open(os.path.join(experiment_folder, "prompt.txt"), "w") as f:
                         f.write(system_prompt)
-                    predictions_df, problematic_generations_df = predict(
-                        dataset,
-                        current_model,
-                        current_tokenizer,
-                        system_prompt,
-                        num_batches=1 if debug_mode else 1e9,
-                        generation_config=generation_config,
-                        num_generation_retries=config.get("num_generation_retries", 5),
-                    )
-                    print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
-                    print(problematic_generations_df)
-                    problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
-                    text_report = classification_report(
-                        predictions_df["label"],
-                        predictions_df["prediction"],
-                        labels=["non-hateful", "hateful"],
-                        target_names=["non-hateful", "hateful"],
-                        zero_division=1,
-                    )
-                    print(text_report)
-                    dict_report = classification_report(
-                        predictions_df["label"],
-                        predictions_df["prediction"],
-                        labels=["non-hateful", "hateful"],
-                        target_names=["non-hateful", "hateful"],
-                        zero_division=1,
-                        output_dict=True,
-                    )
-                    macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
-                    dataset_names.append(dataset.name)
-                    model_names.append(model_name)
-                    definition_names.append(definition.name)
-                    prompting_names.append(prompting_method.name)
-                    macro_f1_scores.append(macro_f1_score)
-                    percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
-                    with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
-                        f.write(text_report)
-                    save_confusion_matrix(
-                        predictions_df["label"],
-                        predictions_df["prediction"],
-                        os.path.join(experiment_folder, "confusion_matrix.csv"),
-                        os.path.join(experiment_folder, "confusion_matrix.txt"),
-                    )
-                    if config["save_predictions"]:
-                        predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
-                    experiment_number += 1
+                    try:
+                        predictions_df, problematic_generations_df = predict(
+                            dataset,
+                            current_model,
+                            current_tokenizer,
+                            system_prompt,
+                            user_suffix=user_completion_nudge(prompting_method._reasoning_enabled),
+                            num_batches=1 if debug_mode else 1e9,
+                            generation_config=generation_config,
+                            num_generation_retries=config.get("num_generation_retries", 5),
+                        )
+                        print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
+                        print(problematic_generations_df)
+                        problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
+                        text_report = classification_report(
+                            predictions_df["label"],
+                            predictions_df["prediction"],
+                            labels=["non-hateful", "hateful"],
+                            target_names=["non-hateful", "hateful"],
+                            zero_division=0,
+                        )
+                        print(text_report)
+                        dict_report = classification_report(
+                            predictions_df["label"],
+                            predictions_df["prediction"],
+                            labels=["non-hateful", "hateful"],
+                            target_names=["non-hateful", "hateful"],
+                            zero_division=0,
+                            output_dict=True,
+                        )
+                        macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
+                        dataset_names.append(dataset.name)
+                        model_names.append(model_name)
+                        definition_names.append(definition.name)
+                        prompting_names.append(prompting_method.name)
+                        macro_f1_scores.append(macro_f1_score)
+                        percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
+                        with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
+                            f.write(text_report)
+                        save_confusion_matrix(
+                            predictions_df["label"],
+                            predictions_df["prediction"],
+                            os.path.join(experiment_folder, "confusion_matrix.csv"),
+                            os.path.join(experiment_folder, "confusion_matrix.txt"),
+                        )
+                        if config["save_predictions"]:
+                            predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
+                        experiment_number += 1
+                    except Exception as e:
+                        print('X'*100)
+                        print(f"Error running experiment {experiment_number}/{total_num_experiments}: {e}")
+                        print('X'*100)
+                        experiment_number += 1
 
 
         del current_model, current_tokenizer
