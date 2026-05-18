@@ -6,7 +6,7 @@
       "selected": [
         "age",
         "disability",
-        "gender_identity",
+        "gender",
         "familial_status",
         "pregnancy",
         "race",

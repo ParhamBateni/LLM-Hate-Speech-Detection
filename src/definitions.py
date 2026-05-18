@@ -194,22 +194,16 @@ class HateSpeechDefinition(ABC):
     :meth:`load_definition`.
     """
 
-    def __init__(self, name: str, null_baseline: bool = False):
+    def __init__(self, name: str, domain: Domain):
         self._name = name
-        self._null_baseline = null_baseline
-
-    @property
-    def null_baseline(self) -> bool:
-        """If True, prompts use a minimal classifier baseline (no HSC / jailbreak framing)."""
-        return self._null_baseline
+        self._domain = domain
 
     @staticmethod
-    def load_definition(definition_spec: dict[str, Any], domain: Optional[Domain] = None) -> "HateSpeechDefinition":
+    def load_definition(definition_spec: dict[str, Any], domain: Domain) -> "HateSpeechDefinition":
         """
         Factory method. ``definition_spec`` may be either:
           - a dict containing a ``path`` key pointing to a JSON file with the full config
           - a dict containing the full config inline (e.g. for vanilla definitions)
-        ``domain`` is required for criteria/mixed definitions.
         """
         if "path" in definition_spec and definition_spec["path"]:
             with open(definition_spec["path"], "r") as f:
@@ -222,12 +216,10 @@ class HateSpeechDefinition(ABC):
 
         definition_type = definition_config.get("type") or definition_spec.get("type")
         if definition_type == VanillaHateSpeechDefinition.TYPE():
-            if "null_baseline" in definition_spec:
-                definition_config["null_baseline"] = definition_spec["null_baseline"]
-            return VanillaHateSpeechDefinition._load_definition(definition_config)
+            return VanillaHateSpeechDefinition._load_definition(definition_config, domain)
         if definition_type == CriteriaHateSpeechDefinition.TYPE():
             include_definition_text = definition_spec.get("include_definition_text", False)
-            return CriteriaHateSpeechDefinition._load_definition(definition_config, domain=domain, include_definition_text=include_definition_text)
+            return CriteriaHateSpeechDefinition._load_definition(definition_config, domain, include_definition_text=include_definition_text)
         raise ValueError(
             f"Invalid hate speech definition type: {definition_type!r}. Expected one of: "
             f"{VanillaHateSpeechDefinition.TYPE()!r}, "
@@ -236,7 +228,7 @@ class HateSpeechDefinition(ABC):
 
     @staticmethod
     @abstractmethod
-    def _load_definition(definition_config: dict, **kwargs) -> "HateSpeechDefinition":
+    def _load_definition(definition_config: dict, domain: Domain, **kwargs) -> "HateSpeechDefinition":
         """Construct a concrete definition from a config dict."""
 
     @abstractmethod
@@ -256,12 +248,12 @@ class HateSpeechDefinition(ABC):
 class VanillaHateSpeechDefinition(HateSpeechDefinition):
     """A plain-text hate speech definition."""
 
-    def __init__(self, name: str, definition_text: str, null_baseline: bool = False):
-        super().__init__(name, null_baseline=null_baseline)
+    def __init__(self, name: str, definition_text: str, domain: Domain):
+        super().__init__(name, domain)
         self._definition_text = definition_text
 
     @staticmethod
-    def _load_definition(definition_config: dict, **kwargs) -> "VanillaHateSpeechDefinition":
+    def _load_definition(definition_config: dict, domain: Domain, **kwargs) -> "VanillaHateSpeechDefinition":
         try:
             name = definition_config["name"]
             definition_text = definition_config["definition_text"]
@@ -272,8 +264,7 @@ class VanillaHateSpeechDefinition(HateSpeechDefinition):
                 "Expected keys: ['name', 'definition_text'].\n"
                 f"Offending config: {definition_config}"
             ) from e
-        null_baseline = bool(definition_config.get("null_baseline", False))
-        return VanillaHateSpeechDefinition(name, definition_text, null_baseline=null_baseline)
+        return VanillaHateSpeechDefinition(name, definition_text, domain)
 
     def prompt_text(self) -> str:
         if self._definition_text:
@@ -301,23 +292,17 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         aspects: dict,
         definition_text: Optional[str] = None,
     ):
-        super().__init__(name, null_baseline=False)
-        self._domain = domain
+        super().__init__(name, domain)
         self._aspects = aspects
         self._definition_text = definition_text
 
     @staticmethod
     def _load_definition(
         definition_config: dict,
-        domain: Optional[Domain] = None,
+        domain: Domain,
         include_definition_text: bool = False,
         **kwargs,
     ) -> "CriteriaHateSpeechDefinition":
-        if domain is None:
-            raise ValueError(
-                "CriteriaHateSpeechDefinition requires a Domain instance. "
-                "Provide one via HateSpeechDefinition.load_definition(..., domain=Domain.load(path))."
-            )
         try:
             name = definition_config["name"]
             aspects = definition_config["aspects"]
@@ -337,12 +322,7 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             )
 
         definition_text = definition_config.get("definition_text") if include_definition_text else None
-        return CriteriaHateSpeechDefinition(
-            name=name,
-            domain=domain,
-            aspects=aspects,
-            definition_text=definition_text,
-        )
+        return CriteriaHateSpeechDefinition(name, domain, aspects, definition_text)
 
     def _resolve_selected(self, path: Tuple[str, ...]):
         node = self._aspects
@@ -359,23 +339,52 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         if isinstance(selected, list):
             if not selected:
                 return Domain.UNSPECIFIED_LABEL
-            return ", ".join(str(v) for v in selected)
-        if isinstance(selected, bool):
-            return "yes" if selected else "no"
-        return str(selected)
+            return ", ".join(CriteriaHateSpeechDefinition._format_domain_token(v) for v in selected)
+        return CriteriaHateSpeechDefinition._format_domain_token(selected)
+
+    @staticmethod
+    def _format_domain_token(value) -> str:
+        if isinstance(value, bool):
+            return "yes" if value else "no"
+        return str(value)
+
+    @staticmethod
+    def _excluded_values(domain_leaf: dict, selected) -> List:
+        """Domain values not selected for this definition (out of scope for hate speech)."""
+        allowed = list(domain_leaf.get("domain", []))
+        multi_value = bool(domain_leaf.get("multi_value", False))
+        if selected is None:
+            return allowed
+        if multi_value:
+            if not isinstance(selected, list):
+                return allowed
+            selected_set = set(selected)
+            return [value for value in allowed if value not in selected_set]
+        return [value for value in allowed if value != selected]
 
     def prompt_text(self) -> str:
-        lines: List[str] = [f"Hate speech is defined using {'jointly the reference plain-text definition and ' if self._definition_text else ''}the extracted Hate Speech Criteria Aspects."]
+        lines: List[str] = [
+            "Hate speech is defined using "
+            f"{'jointly the reference plain-text definition and ' if self._definition_text else ''}"
+            "the extracted Hate Speech Criteria (HSC) aspects below. "
+            "For each aspect, included values are in scope; excluded values are not treated as "
+            "part of this definition."
+        ]
         if self._definition_text:
             lines.append(f"Reference plain-text definition: {self._definition_text}")
         lines.append("Extracted Hate Speech Criteria Aspects:")
         for idx, (path, leaf) in enumerate(self._domain.iter_leaves(), start=1):
             description = (leaf.get("description") or "").strip()
             selected = self._resolve_selected(path)
-            value_str = self._format_value(selected)
+            excluded = self._excluded_values(leaf, selected)
+            included_str = self._format_value(selected)
+            excluded_str = self._format_value(excluded) if excluded else "none"
             label = " / ".join(p.replace("_", " ") for p in path)
             suffix = f" ({description})" if description else ""
-            lines.append(f"{idx}. {label}{suffix}: {value_str}")
+            lines.append(
+                f"{idx}. {label}{suffix}: included: {included_str}; "
+                f"excluded (not in scope): {excluded_str}"
+            )
         return "\n".join(lines)
 
     @staticmethod
