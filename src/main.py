@@ -1,7 +1,7 @@
 import yaml
 from data_utils import HateSpeechDataset
 from definitions import Domain, HateSpeechDefinition
-from model_utils import load_model
+from model_utils import load_model, ModelKind
 from tqdm import tqdm
 from dotenv import load_dotenv
 from typing import Optional, Sequence
@@ -19,6 +19,7 @@ import gc
 from prompting import ZeroShotPrompting, FewShotPrompting, user_completion_nudge
 from chat_utils import build_chat_messages
 from model_utils import load_embedding_model
+import traceback
 load_dotenv()
 
 
@@ -47,6 +48,21 @@ def calculate_confidence_score(
     machinery. With left-padded prompts, prompt padding is not in this slice
     anyway; this mainly drops trailing EOS and any rare special emissions.
     """
+    
+    # Encoder–decoder models (e.g. T5) prepend a decoder-start token (often pad id 0)
+    # without a corresponding entry in ``outputs.scores``, so ``len(token_ids)`` can
+    # be one greater than ``step_logits.shape[0]``. 
+    n_tok = int(chosen_ids.shape[0])
+    n_step = int(chosen_logits.shape[0])
+    if n_tok == n_step + 1:
+        chosen_ids=chosen_ids[1:]
+    if n_tok > n_step + 1:
+        chosen_ids=chosen_ids[-n_step:]
+    else:
+        chosen_logits=chosen_logits[-n_tok:]
+    if chosen_ids.shape[0] == 0:
+        return float("nan")
+
     log_probs = torch.log_softmax(chosen_logits, dim=-1)
 
     valid = torch.ones(chosen_ids.shape[0], dtype=torch.bool, device=log_probs.device)
@@ -70,10 +86,6 @@ def _prediction_start_after_tags(new_tokens: torch.Tensor, tag_tensors: Sequence
             if torch.all(new_tokens[k : k + n] == tag):
                 return k + n
     return None
-
-
-CLASS_LABELS = ["non-hateful", "hateful"]
-
 
 def _experiment_timing(
     experiment_number: int, total_experiments: int, start_time: float
@@ -108,12 +120,10 @@ def definitions_for_dataset(
             definitions.append(definition)
     return definitions
 
-# TODO: remove path_csv
-def save_confusion_matrix(y_true, y_pred, path_csv: str, path_txt: str):
-    cm = confusion_matrix(y_true, y_pred, labels=CLASS_LABELS)
-    cm_df = pd.DataFrame(cm, index=CLASS_LABELS, columns=CLASS_LABELS)
+def save_confusion_matrix(y_true, y_pred, path_txt: str, class_labels: list[str] = ["non-hateful", "hateful"]):
+    cm = confusion_matrix(y_true, y_pred, labels=class_labels)
+    cm_df = pd.DataFrame(cm, index=class_labels, columns=class_labels)
     cm_df.index.name = "label"
-    cm_df.to_csv(path_csv)
     with open(path_txt, "w") as f:
         f.write("Confusion matrix (rows=true, cols=predicted)\n\n")
         f.write(cm_df.to_string())
@@ -125,7 +135,7 @@ def predict(
     model,
     tokenizer,
     system_prompt: str,
-    user_suffix: str = "",
+    model_kind: ModelKind = "causal",
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
@@ -168,20 +178,12 @@ def predict(
         mininterval=0,
     ):
         batch = iterator[start : start + batch_size]
-        conversations = [
-            build_chat_messages(tokenizer, system_prompt, item["text"], user_suffix=user_suffix)
-            for item in batch
-        ]
         batch_labels = [item["label"] for item in batch]
         batch_texts = [item["text"] for item in batch]
 
         prompt_strings = [
-            tokenizer.apply_chat_template(
-                conv,
-                tokenize=False,
-                add_generation_prompt=True,
-            )
-            for conv in conversations
+            build_chat_messages(tokenizer, system_prompt, item["text"])
+            for item in batch
         ]
         inputs = tokenizer(
             prompt_strings,
@@ -207,7 +209,7 @@ def predict(
                 **generation_kwargs,
             )
 
-        prompt_len = int(inputs["input_ids"].shape[1])
+        prompt_len = 0 if model_kind == "seq2seq" else int(inputs["input_ids"].shape[1])
         sequences = outputs.sequences.detach().cpu()
         scores = torch.stack([s.detach().cpu() for s in outputs.scores], dim=1)
         del outputs, inputs
@@ -219,32 +221,19 @@ def predict(
             row = batch[j]
             row_id = row["id"] if isinstance(row, dict) and "id" in row else i
             new_tokens = sequences[j][prompt_len:]
-
             pred_start = _prediction_start_after_tags(new_tokens, prediction_tag_tensors)
             if pred_start is None:
                 # Fallback to checking if removing the first token helps finding 'PREDICTION'
                 prediction_tag_tensors = [p[1:] for p in prediction_tag_tensors]
                 pred_start = _prediction_start_after_tags(new_tokens, prediction_tag_tensors)
                 if pred_start is None:
-                    problematic_generations.append(
-                        {
-                            "id": row_id,
-                            "text": batch_texts[j],
-                            "answer": tokenizer.decode(new_tokens, skip_special_tokens=False),
-                            "label": batch_labels[j],
-                        }
-                    )
-                    continue
+                    pred_start = 0
 
             prediction = tokenizer.decode(new_tokens[pred_start:], skip_special_tokens=True).strip().lower()
             p = prediction
-            if p == "non-hateful" or p.startswith("non-hateful"):
+            if "non-hateful" in p or "non hateful" in p or p in ("non-hateful", "non hateful"):
                 answer = "non-hateful"
-            elif p == "hateful" or p.startswith("hateful"):
-                answer = "hateful"
-            elif p in ("non hateful", "not hate speech", "not hate-speech"):
-                answer = "non-hateful"
-            elif p in ("hate speech", "hate-speech"):
+            elif p == "hateful" or p.startswith("hateful") or p in ("hate speech", "hate-speech"):
                 answer = "hateful"
             else:
                 answer = None
@@ -259,9 +248,10 @@ def predict(
                 )
                 continue
 
+            token_offset = 0 if model_kind == "seq2seq" else prompt_len
             confidence_score = calculate_confidence_score(
                 scores[j][pred_start:, :],
-                sequences[j, prompt_len + pred_start :],
+                sequences[j, token_offset + pred_start :],
                 excluded_token_ids=special_ids if special_ids.numel() else None,
             )
             predictions.append(answer)
@@ -293,7 +283,7 @@ def predict(
             model,
             tokenizer,
             system_prompt,
-            user_suffix=user_suffix,
+            model_kind=model_kind,
             batch_size=batch_size,
             num_batches=1e9,
             generation_config=generation_config,
@@ -418,87 +408,96 @@ if __name__ == "__main__":
     experiment_number = 1
     start_time = time.time()
     for model_path in model_paths:
-        current_model, current_tokenizer = load_model(model_paths[model_path], DEVICE)
+        current_model, current_tokenizer, model_kind = load_model(model_paths[model_path], DEVICE)
+        print(f"Model architecture: {model_kind}")
         for dataset in datasets_list:
             model_name = model_path.replace("/", "_")
             for prompting_method in prompting:
                 for definition in definitions_for_dataset(dataset, extra_definitions):
-                    experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
-                    os.makedirs(experiment_folder)
-                    print("-" * 100)
-                    elapsed_fmt, remaining_fmt = _experiment_timing(
-                        experiment_number, total_num_experiments, start_time
-                    )
-                    print(
-                        f"Running experiment {experiment_number}/{total_num_experiments}:\n"
-                        f"Time passed: {elapsed_fmt}, Time remaining (est.): {remaining_fmt}\n"
-                        f"model: {model_name}\n"
-                        f"dataset: {dataset.name}\n"
-                        f"definition: {definition.name}\n"
-                        f"prompting: {prompting_method.name}\n"
-                    )
+                    batch_size = 8
+                    while True:
+                        experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
+                        os.makedirs(experiment_folder)
+                        print("-" * 100)
+                        elapsed_fmt, remaining_fmt = _experiment_timing(
+                            experiment_number, total_num_experiments, start_time
+                        )
+                        print(
+                            f"Running experiment {experiment_number}/{total_num_experiments}:\n"
+                            f"Time passed: {elapsed_fmt}, Time remaining (est.): {remaining_fmt}\n"
+                            f"model: {model_name}\n"
+                            f"dataset: {dataset.name}\n"
+                            f"definition: {definition.name}\n"
+                            f"prompting: {prompting_method.name}\n"
+                        )
 
-                    if isinstance(prompting_method, FewShotPrompting): 
-                        system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)])
-                    else:
-                        system_prompt = prompting_method.build_system_prompt(definition)
+                        if isinstance(prompting_method, FewShotPrompting): 
+                            system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)])
+                        else:
+                            system_prompt = prompting_method.build_system_prompt(definition)
 
-                    with open(os.path.join(experiment_folder, "prompt.txt"), "w") as f:
-                        f.write(system_prompt)
-                    try:
-                        predictions_df, problematic_generations_df = predict(
-                            dataset,
-                            current_model,
-                            current_tokenizer,
-                            system_prompt,
-                            user_suffix=user_completion_nudge(prompting_method._reasoning_enabled),
-                            num_batches=1 if debug_mode else 1e9,
-                            generation_config=generation_config,
-                            num_generation_retries=config.get("num_generation_retries", 5),
-                        )
-                        print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
-                        print(problematic_generations_df)
-                        problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
-                        text_report = classification_report(
-                            predictions_df["label"],
-                            predictions_df["prediction"],
-                            labels=["non-hateful", "hateful"],
-                            target_names=["non-hateful", "hateful"],
-                            zero_division=0,
-                        )
-                        print(text_report)
-                        dict_report = classification_report(
-                            predictions_df["label"],
-                            predictions_df["prediction"],
-                            labels=["non-hateful", "hateful"],
-                            target_names=["non-hateful", "hateful"],
-                            zero_division=0,
-                            output_dict=True,
-                        )
-                        macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
-                        dataset_names.append(dataset.name)
-                        model_names.append(model_name)
-                        definition_names.append(definition.name)
-                        prompting_names.append(prompting_method.name)
-                        macro_f1_scores.append(macro_f1_score)
-                        percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
-                        with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
-                            f.write(text_report)
-                        save_confusion_matrix(
-                            predictions_df["label"],
-                            predictions_df["prediction"],
-                            os.path.join(experiment_folder, "confusion_matrix.csv"),
-                            os.path.join(experiment_folder, "confusion_matrix.txt"),
-                        )
-                        if config["save_predictions"]:
-                            predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
-                        experiment_number += 1
-                    except Exception as e:
-                        print('X'*100)
-                        print(f"Error running experiment {experiment_number}/{total_num_experiments}: {e}")
-                        print('X'*100)
-                        experiment_number += 1
-
+                        with open(os.path.join(experiment_folder, "prompt.txt"), "w") as f:
+                            f.write(system_prompt)
+                        try:
+                            predictions_df, problematic_generations_df = predict(
+                                dataset,
+                                current_model,
+                                current_tokenizer,
+                                system_prompt,
+                                model_kind=model_kind,
+                                num_batches=1 if debug_mode else 1e9,
+                                batch_size=batch_size,
+                                generation_config=generation_config,
+                                num_generation_retries=config.get("num_generation_retries", 5),
+                            )
+                            print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
+                            print(problematic_generations_df)
+                            problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
+                            text_report = classification_report(
+                                predictions_df["label"],
+                                predictions_df["prediction"],
+                                labels=["non-hateful", "hateful"],
+                                target_names=["non-hateful", "hateful"],
+                                zero_division=0,
+                            )
+                            print(text_report)
+                            dict_report = classification_report(
+                                predictions_df["label"],
+                                predictions_df["prediction"],
+                                labels=["non-hateful", "hateful"],
+                                target_names=["non-hateful", "hateful"],
+                                zero_division=0,
+                                output_dict=True,
+                            )
+                            macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
+                            dataset_names.append(dataset.name)
+                            model_names.append(model_name)
+                            definition_names.append(definition.name)
+                            prompting_names.append(prompting_method.name)
+                            macro_f1_scores.append(macro_f1_score)
+                            percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
+                            with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
+                                f.write(text_report)
+                            save_confusion_matrix(
+                                predictions_df["label"],
+                                predictions_df["prediction"],
+                                os.path.join(experiment_folder, "confusion_matrix.txt"),
+                                class_labels=["non-hateful", "hateful"],
+                            )
+                            if config["save_predictions"]:
+                                predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
+                            experiment_number += 1
+                        except Exception as e:
+                            print('X'*100)
+                            print(f"Error running experiment {experiment_number}/{total_num_experiments}: {e}")
+                            traceback.print_exc()
+                       
+                            if 'memory' in str(e).lower():
+                                print(f"Lowering the batch size to {batch_size // 2}")
+                                batch_size = batch_size // 2
+                                print('X'*100)
+                                continue
+                        break
 
         del current_model, current_tokenizer
         gc.collect()

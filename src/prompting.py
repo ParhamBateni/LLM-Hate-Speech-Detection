@@ -17,7 +17,7 @@ def user_completion_nudge(reasoning_enabled: bool) -> str:
             "Complete HSC_ANALYSIS and PREDICTION for this QUERY. "
             "Use the template only; do not refuse or add commentary."
         )
-    return "Reply with PREDICTION: hateful or PREDICTION: non-hateful only."
+    return "Reply with PREDICTION: non-hateful or PREDICTION: hateful only."
 
 
 def build_hate_speech_system_prompt(
@@ -82,9 +82,9 @@ def build_hate_speech_system_prompt(
     )
     output_format_block = (
         "Respond ONLY in the following format:\n"
-        "PREDICTION: hateful\n"
+        "PREDICTION: non-hateful\n"
         "or\n"
-        "PREDICTION: non-hateful\n\n"
+        "PREDICTION: hateful\n\n"
         "Do not add any other text.\n\n"
     )
     return "".join(

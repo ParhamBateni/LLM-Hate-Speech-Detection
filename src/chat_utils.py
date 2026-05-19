@@ -1,22 +1,23 @@
-def _chat_template_rejects_system_role(tokenizer) -> bool:
-    """True when the tokenizer's Jinja chat template errors on ``role: system`` (e.g. Gemma 2 IT)."""
-    ct = getattr(tokenizer, "chat_template", None)
-    return isinstance(ct, str) and "System role not supported" in ct
-
-
 def build_chat_messages(
     tokenizer,
     system_prompt: str,
     user_text: str,
-    user_suffix: str = "",
-) -> list:
-    """Build HF-style chat messages; fold system into user when the template has no system role."""
-    query = f"QUERY: {user_text}"
-    if user_suffix:
-        query = f"{query}\n\n{user_suffix}"
-    if _chat_template_rejects_system_role(tokenizer):
-        return [{"role": "user", "content": f"System:\n{system_prompt.strip()}\n\nUser:\n{query}"}]
-    return [
+) -> str:
+    """Build a prompt string for the model (chat template or plain text for T5)."""
+    query = f'QUERY: "{user_text}"'
+    ct = getattr(tokenizer, "chat_template", None)
+    if ct is None:
+        # T5/FLAN: drop PREDICTION format lines (prime a constant label); complete after Answer:
+        rules = system_prompt.split("Respond ONLY in the following format:")[0].strip()
+        return f"{rules}\n\nQUERY: \"{user_text}\"\n\nPREDICTION:"
+    if isinstance(ct, str) and "System role not supported" in ct:
+        return f"SYSTEM: {system_prompt.strip()}\n\nUSER: {query}"
+    conversation = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query},
     ]
+    return tokenizer.apply_chat_template(
+        conversation,
+        tokenize=False,
+        add_generation_prompt=True,
+    )

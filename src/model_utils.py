@@ -1,4 +1,5 @@
 import os
+from typing import Literal
 
 import torch
 import transformers
@@ -7,25 +8,63 @@ from sentence_transformers import SentenceTransformer
 CACHE_DIR = "cache"
 TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
 
-def load_model(model_path: str, device: torch.device):
-    """Load a model from the Hugging Face Hub or a local file.
-    """
-    model = transformers.AutoModelForCausalLM.from_pretrained(
+ModelKind = Literal["causal", "seq2seq"]
+
+
+def model_kind_for_path(model_path: str) -> ModelKind:
+    """Return ``seq2seq`` for encoder–decoder models (T5, BART, …), else ``causal``."""
+    config = _load_config(model_path)
+    if getattr(config, "is_encoder_decoder", False):
+        return "seq2seq"
+    return "causal"
+
+
+def _load_config(model_path: str):
+    return transformers.AutoConfig.from_pretrained(
         model_path,
         cache_dir=CACHE_DIR,
         token=TOKEN,
-    ).to(device)
+    )
+
+
+def load_model(model_path: str, device: torch.device) -> tuple:
+    """Load model, tokenizer, and architecture kind (``causal`` or ``seq2seq``)."""
+    kind = model_kind_for_path(model_path)
+
+    if kind == "seq2seq":
+        model = transformers.AutoModelForSeq2SeqLM.from_pretrained(
+            model_path,
+            cache_dir=CACHE_DIR,
+            token=TOKEN,
+        ).to(device)
+    else:
+        model = transformers.AutoModelForCausalLM.from_pretrained(
+            model_path,
+            cache_dir=CACHE_DIR,
+            token=TOKEN,
+        ).to(device)
+
     model.eval()
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_path,
         cache_dir=CACHE_DIR,
         token=TOKEN,
     )
-    tokenizer.padding_side = "left"
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    model.generation_config.pad_token_id = tokenizer.pad_token_id
-    return model, tokenizer
+
+    if kind == "causal":
+        tokenizer.padding_side = "left"
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+    else:
+        tokenizer.padding_side = "right"
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
+    if getattr(model, "generation_config", None) is not None:
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+    return model, tokenizer, kind
+
 
 def load_embedding_model(model_path: str, device: torch.device):
     return SentenceTransformer(model_path, cache_folder=CACHE_DIR, token=TOKEN).to(device)
