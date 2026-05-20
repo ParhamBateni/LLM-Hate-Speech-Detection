@@ -8,8 +8,8 @@
       "domain": [
         "gender",
         "sex",
-        "gender_identity",
-        "sexual_orientation",
+        "gender identity",
+        "sexual orientation",
         "race",
         "color",
         "ethnicity",
@@ -19,7 +19,7 @@
         "age",
         "language",
         "class",
-        "familial_status",
+        "familial status",
         "pregnancy"
       ]
     },

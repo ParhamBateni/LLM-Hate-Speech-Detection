@@ -1,189 +1,6 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
-from typing import Iterable, Iterator, List, Optional, Tuple, Any
+from typing import List, Any
 import json
-
-
-class Domain:
-    """
-    Modular loader and validator for the Hate Speech Criteria (HSC) domain template.
-
-    Structure of a domain file (e.g. data/definitions/domain.json):
-
-      { "aspects": {
-            <aspect>: {
-                "description": <str, optional>,
-                # Leaf form (no sub-aspects):
-                "multi_value": <bool>,
-                "domain": [<allowed value 1>, <allowed value 2>, ...]
-                # OR Branch form (sub-aspects):
-                <sub-aspect>: { ... leaf or branch ... },
-                ...
-            },
-            ...
-        }
-      }
-
-    A leaf node is detected by the presence of both ``multi_value`` and ``domain`` keys.
-    Wherever the special token ``"others"`` appears in a leaf's ``domain`` list, the leaf is
-    treated as open: any string value is then accepted for that aspect.
-    """
-
-    LEAF_KEYS = frozenset({"multi_value", "domain", "open_domain"})
-    UNSPECIFIED_LABEL = "unspecified"
-
-    def __init__(
-        self,
-        aspects: dict,
-        description: Optional[str] = None,
-    ):
-        if not isinstance(aspects, dict) or not aspects:
-            raise ValueError("Domain 'aspects' must be a non-empty dict.")
-        self._aspects = aspects
-        self._description = description
-
-    @staticmethod
-    def load(path) -> "Domain":
-        path = Path(path)
-        with open(path, "r") as f:
-            config = json.load(f)
-        aspects = config.get("aspects")
-        if not isinstance(aspects, dict) or not aspects:
-            raise ValueError(f"Domain file '{path}' must contain a non-empty 'aspects' dict.")
-        return Domain(
-            aspects=aspects,
-            description=config.get("$description"),
-        )
-
-    @property
-    def aspects(self) -> dict:
-        return self._aspects
-
-    @property
-    def description(self) -> Optional[str]:
-        return self._description
-
-    @classmethod
-    def is_leaf(cls, node) -> bool:
-        return isinstance(node, dict) and cls.LEAF_KEYS.issubset(node.keys())
-
-    @classmethod
-    def _iter_branches(cls, node: dict) -> Iterator[Tuple[str, dict]]:
-        """Yield (key, child) pairs whose child is a dict (skipping string metadata such as 'description')."""
-        for key, child in node.items():
-            if isinstance(child, dict):
-                yield key, child
-
-    def iter_leaves(
-        self,
-        node: Optional[dict] = None,
-        path: Tuple[str, ...] = (),
-    ) -> Iterator[Tuple[Tuple[str, ...], dict]]:
-        """Recursively yield ``(path, leaf_node)`` pairs in domain order."""
-        if node is None:
-            node = self._aspects
-        for key, child in self._iter_branches(node):
-            current_path = path + (key,)
-            if self.is_leaf(child):
-                yield current_path, child
-            else:
-                yield from self.iter_leaves(child, current_path)
-
-    @staticmethod
-    def extract_selected(def_value):
-        """
-        Extract the actual selected value from a definition node.
-
-        Definition files may store leaf values in either of two shapes:
-          - direct scalar / list / None (e.g. ``"enable": null``)
-          - wrapped dict with a ``selected`` key (e.g. ``{"selected": [...], "notes": "..."}``)
-        """
-        if isinstance(def_value, dict) and "selected" in def_value:
-            return def_value["selected"]
-        return def_value
-
-    def validate(self, definition_aspects: dict) -> List[str]:
-        """
-        Check that ``definition_aspects`` mirrors this domain and that every leaf
-        value falls inside the corresponding allowed-values list.
-
-        Returns a list of human-readable error messages; empty list means the
-        definition is consistent with the domain.
-        """
-        errors: List[str] = []
-        self._validate_node(self._aspects, definition_aspects, (), errors)
-        return errors
-
-    def _validate_node(
-        self,
-        domain_node: dict,
-        def_node,
-        path: Tuple[str, ...],
-        errors: List[str],
-    ) -> None:
-        path_str = ".".join(path) if path else "<root>"
-        if not isinstance(def_node, dict):
-            errors.append(
-                f"Aspect '{path_str}' must be a dict to mirror the domain branch, got {type(def_node).__name__}."
-            )
-            return
-        for key, domain_child in self._iter_branches(domain_node):
-            current_path = path + (key,)
-            if key not in def_node:
-                errors.append(f"Missing aspect '{'.'.join(current_path)}' in the definition.")
-                continue
-            def_child = def_node[key]
-            if self.is_leaf(domain_child):
-                self._validate_leaf(domain_child, def_child, current_path, errors)
-            else:
-                self._validate_node(domain_child, def_child, current_path, errors)
-
-    def _validate_leaf(
-        self,
-        domain_leaf: dict,
-        def_value,
-        path: Tuple[str, ...],
-        errors: List[str],
-    ) -> None:
-        path_str = ".".join(path)
-        multi_value = bool(domain_leaf.get("multi_value", False))
-        open_domain = bool(domain_leaf.get("open_domain", False))
-        allowed = list(domain_leaf.get("domain", []))
-        selected = self.extract_selected(def_value)
-        if selected is None:
-            return
-
-        if multi_value:
-            if not isinstance(selected, list):
-                errors.append(
-                    f"Aspect '{path_str}' is multi-valued, expected a list (or null), got "
-                    f"{type(selected).__name__}: {selected!r}."
-                )
-                return
-            offending = []
-            for v in selected:
-                if not isinstance(v, str):
-                    errors.append(f"Aspect '{path_str}' contains a non-string value: {v!r}.")
-                    continue
-                if (not open_domain) and v not in allowed:
-                    offending.append(v)
-            if offending:
-                errors.append(
-                    f"Aspect '{path_str}' contains values {offending} not in the domain {allowed}. "
-                )
-            return
-
-        if isinstance(selected, (list, dict)):
-            errors.append(
-                f"Aspect '{path_str}' is single-valued, expected a scalar (or null), got "
-                f"{type(selected).__name__}: {selected!r}."
-            )
-            return
-        if (not open_domain) and selected not in allowed:
-            errors.append(
-                f"Aspect '{path_str}' value {selected!r} is not in the domain {allowed}. "
-            )
-
 
 class HateSpeechDefinition(ABC):
     """
@@ -194,12 +11,11 @@ class HateSpeechDefinition(ABC):
     :meth:`load_definition`.
     """
 
-    def __init__(self, name: str, domain: Domain):
+    def __init__(self, name: str):
         self._name = name
-        self._domain = domain
 
     @staticmethod
-    def load_definition(definition_spec: dict[str, Any], domain: Domain) -> "HateSpeechDefinition":
+    def load_definition(definition_spec: dict[str, Any]) -> "HateSpeechDefinition":
         """
         Factory method. ``definition_spec`` may be either:
           - a dict containing a ``path`` key pointing to a JSON file with the full config
@@ -216,10 +32,9 @@ class HateSpeechDefinition(ABC):
 
         definition_type = definition_config.get("type") or definition_spec.get("type")
         if definition_type == VanillaHateSpeechDefinition.TYPE():
-            return VanillaHateSpeechDefinition._load_definition(definition_config, domain)
+            return VanillaHateSpeechDefinition._load_definition(definition_config)
         if definition_type == CriteriaHateSpeechDefinition.TYPE():
-            include_definition_text = definition_spec.get("include_definition_text", False)
-            return CriteriaHateSpeechDefinition._load_definition(definition_config, domain, include_definition_text=include_definition_text)
+            return CriteriaHateSpeechDefinition._load_definition(definition_config)
         raise ValueError(
             f"Invalid hate speech definition type: {definition_type!r}. Expected one of: "
             f"{VanillaHateSpeechDefinition.TYPE()!r}, "
@@ -228,7 +43,7 @@ class HateSpeechDefinition(ABC):
 
     @staticmethod
     @abstractmethod
-    def _load_definition(definition_config: dict, domain: Domain, **kwargs) -> "HateSpeechDefinition":
+    def _load_definition(definition_config: dict) -> "HateSpeechDefinition":
         """Construct a concrete definition from a config dict."""
 
     @abstractmethod
@@ -246,14 +61,14 @@ class HateSpeechDefinition(ABC):
 
 
 class VanillaHateSpeechDefinition(HateSpeechDefinition):
-    """A plain-text hate speech definition."""
+    """Custom hate speech definition."""
 
-    def __init__(self, name: str, definition_text: str, domain: Domain):
-        super().__init__(name, domain)
+    def __init__(self, name: str, definition_text: str):
+        super().__init__(name)
         self._definition_text = definition_text
 
     @staticmethod
-    def _load_definition(definition_config: dict, domain: Domain, **kwargs) -> "VanillaHateSpeechDefinition":
+    def _load_definition(definition_config: dict) -> "VanillaHateSpeechDefinition":
         try:
             name = definition_config["name"]
             definition_text = definition_config["definition_text"]
@@ -264,12 +79,10 @@ class VanillaHateSpeechDefinition(HateSpeechDefinition):
                 "Expected keys: ['name', 'definition_text'].\n"
                 f"Offending config: {definition_config}"
             ) from e
-        return VanillaHateSpeechDefinition(name, definition_text, domain)
+        return VanillaHateSpeechDefinition(name, definition_text)
 
     def prompt_text(self) -> str:
-        if self._definition_text:
-            return "Reference plain-text definition: " + self._definition_text
-        return ""
+        return self._definition_text
 
     @staticmethod
     def TYPE() -> str:
@@ -285,107 +98,103 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
     validation and to :meth:`prompt_text` rendering, without code changes here.
     """
 
+    TARGET_GROUPS_DOMAIN = ["gender", "sexual orientation", "race", "color", "ethnicity", "nationality", "religion", "disability", "age", "language", "class", "familial status", "pregnancy"]
+    DOMINANCE_GROUPS_DOMAIN = ["white_people", "men"]
+    PERPETRATOR_CHARACTERISTICS_DOMAIN = ["dominance of group", "societal role", "member of target group"]
+    EXPLICIT_REFERENCE_DOMAIN = ["stereotype", "group characteristic", "slur"]
+    EFFECTS_CONSEQUENCES_DOMAIN = ["violence", "hate", "discrimination"]
+    
     def __init__(
         self,
         name: str,
-        domain: Domain,
-        aspects: dict,
-        definition_text: Optional[str] = None,
+        target_groups: List[str],
+        dominance: bool,
+        dominance_groups: List[str],
+        perpetrator_characteristics: List[str],
+        explicit_reference: List[str],
+        insults_group: bool,
+        effects_consequences: List[str],
     ):
-        super().__init__(name, domain)
-        self._aspects = aspects
-        self._definition_text = definition_text
+        super().__init__(name)
+        self._target_groups = target_groups
+        self._dominance = dominance
+        self._dominance_groups = dominance_groups
+        self._perpetrator_characteristics = perpetrator_characteristics
+        self._explicit_reference = explicit_reference
+        self._insults_group = insults_group
+        self._effects_consequences = effects_consequences
+        self._validate()
+
+
+    def _validate(self):
+        if not all(group in CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN for group in self._target_groups):
+            raise ValueError(f"Invalid target groups: {self._target_groups}. Expected one of: {CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN}")
+        if not all(group in CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN for group in self._dominance_groups):
+            raise ValueError(f"Invalid dominance groups: {self._dominance_groups}. Expected one of: {CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN}")
+        if not all(characteristic in CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN for characteristic in self._perpetrator_characteristics):
+            raise ValueError(f"Invalid perpetrator characteristics: {self._perpetrator_characteristics}. Expected one of: {CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN}")
+        if not all(reference in CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN for reference in self._explicit_reference):
+            raise ValueError(f"Invalid explicit reference: {self._explicit_reference}. Expected one of: {CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN}")
+        if not all(consequence in CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN for consequence in self._effects_consequences):
+            raise ValueError(f"Invalid effects/consequences: {self._effects_consequences}. Expected one of: {CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN}")
 
     @staticmethod
     def _load_definition(
         definition_config: dict,
-        domain: Domain,
-        include_definition_text: bool = False,
-        **kwargs,
     ) -> "CriteriaHateSpeechDefinition":
         try:
             name = definition_config["name"]
-            aspects = definition_config["aspects"]
+            target_groups = definition_config["target_groups"]
+            dominance = definition_config["dominance"]
+            dominance_groups = definition_config["dominance_groups"]
+            perpetrator_characteristics = definition_config["perpetrator_characteristics"]
+            explicit_reference = definition_config["explicit_reference"]
+            insults_group = definition_config["insults_group"]
+            effects_consequences = definition_config["effects_consequences"]
         except KeyError as e:
             missing_key = str(e).strip("'")
             raise KeyError(
                 f"Missing required key '{missing_key}' in CriteriaHateSpeechDefinition configuration. "
-                "Expected keys: ['name', 'aspects'].\n"
+                "Expected keys: ['name', 'target_groups', 'dominance', 'dominance_groups', 'perpetrator_characteristics', 'explicit_reference', 'insults_group', 'effects_consequences'].\n"
                 f"Offending config: {definition_config}"
             ) from e
 
-        errors = domain.validate(aspects)
-        if errors:
-            bullet_list = "\n  - ".join(errors)
-            raise ValueError(
-                f"Definition '{name}' is not consistent with the domain:\n  - {bullet_list}"
-            )
-
-        definition_text = definition_config.get("definition_text") if include_definition_text else None
-        return CriteriaHateSpeechDefinition(name, domain, aspects, definition_text)
-
-    def _resolve_selected(self, path: Tuple[str, ...]):
-        node = self._aspects
-        for key in path:
-            if not isinstance(node, dict) or key not in node:
-                return None
-            node = node[key]
-        return Domain.extract_selected(node)
-
-    @staticmethod
-    def _format_value(selected) -> str:
-        if selected is None:
-            return Domain.UNSPECIFIED_LABEL
-        if isinstance(selected, list):
-            if not selected:
-                return Domain.UNSPECIFIED_LABEL
-            return ", ".join(CriteriaHateSpeechDefinition._format_domain_token(v) for v in selected)
-        return CriteriaHateSpeechDefinition._format_domain_token(selected)
-
-    @staticmethod
-    def _format_domain_token(value) -> str:
-        if isinstance(value, bool):
-            return "yes" if value else "no"
-        return str(value)
-
-    @staticmethod
-    def _excluded_values(domain_leaf: dict, selected) -> List:
-        """Domain values not selected for this definition (out of scope for hate speech)."""
-        allowed = list(domain_leaf.get("domain", []))
-        multi_value = bool(domain_leaf.get("multi_value", False))
-        if selected is None:
-            return allowed
-        if multi_value:
-            if not isinstance(selected, list):
-                return allowed
-            selected_set = set(selected)
-            return [value for value in allowed if value not in selected_set]
-        return [value for value in allowed if value != selected]
+        return CriteriaHateSpeechDefinition(name, target_groups, dominance, dominance_groups, perpetrator_characteristics, explicit_reference, insults_group, effects_consequences)
 
     def prompt_text(self) -> str:
-        lines: List[str] = [
-            "Hate speech is defined using "
-            f"{'jointly the reference plain-text definition and ' if self._definition_text else ''}"
-            "the extracted Hate Speech Criteria (HSC) aspects below. "
-            "For each aspect, included values are in scope; excluded values are not treated as "
-            "part of this definition."
-        ]
-        if self._definition_text:
-            lines.append(f"Reference plain-text definition: {self._definition_text}")
-        lines.append("Extracted Hate Speech Criteria Aspects:")
-        for idx, (path, leaf) in enumerate(self._domain.iter_leaves(), start=1):
-            description = (leaf.get("description") or "").strip()
-            selected = self._resolve_selected(path)
-            excluded = self._excluded_values(leaf, selected)
-            included_str = self._format_value(selected)
-            excluded_str = self._format_value(excluded) if excluded else "none"
-            label = " / ".join(p.replace("_", " ") for p in path)
-            suffix = f" ({description})" if description else ""
-            lines.append(
-                f"{idx}. {label}{suffix}: included: {included_str}; "
-                f"excluded (not in scope): {excluded_str}"
-            )
-        return "\n".join(lines)
+        parts = []
+        parts.append("Hate speech is defined as language targetted at a person or group")
+        excluded_target_groups = set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN) - set(self._target_groups)
+        if self._target_groups:
+            parts.append(f"based on their {', '.join(self._target_groups)} (not their {', '.join(excluded_target_groups)})")
+        else:
+            parts.append(f"(not based on their {', '.join(excluded_target_groups)})")
+        if self._dominance:
+            parts.append(f"from both dominant and non-dominant groups.")
+        else:
+            parts.append(f"from only non-dominant groups.")
+        if self._dominance_groups:
+            parts.append(f"Dominant groups are defined as {', '.join(self._dominance_groups)}.")
+        parts.append("Our definition of hate speech")
+        if self._insults_group:
+            parts.append("insults a group and")
+        excluded_effects_consequences = set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN) - set(self._effects_consequences)
+        if self._effects_consequences:
+            parts.append(f"incites {', '.join(self._effects_consequences)} (not {', '.join(excluded_effects_consequences)})")
+        else:
+            parts.append(f"does not incite {', '.join(excluded_effects_consequences)}")
+        excluded_explicit_reference = set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN) - set(self._explicit_reference)
+        if self._explicit_reference:
+            parts.append(f"through the usage of {', '.join(self._explicit_reference)} (not {', '.join(excluded_explicit_reference)}).")
+        else:
+            parts.append(f"and does not explicitly reference {', '.join(excluded_explicit_reference)}.")
+        excluded_perpetrator_characteristics = set(CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN) - set(self._perpetrator_characteristics)
+        parts.append("Our definition of hate speech is")
+        if self._perpetrator_characteristics:
+            parts.append(f"based on the perpetrator's characteristics of {', '.join(self._perpetrator_characteristics)} (not {', '.join(excluded_perpetrator_characteristics)}).")
+        else:
+            parts.append(f"not based on the perpetrator's characteristics of {', '.join(excluded_perpetrator_characteristics)}.")
+        return " ".join(parts)
 
     @staticmethod
     def TYPE() -> str:

@@ -5,20 +5,9 @@ from enum import StrEnum
 from definitions import HateSpeechDefinition
 from abc import ABC, abstractmethod
 import random
-from typing import Any
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances_argmin
 from sentence_transformers import SentenceTransformer
-
-
-def user_completion_nudge(reasoning_enabled: bool) -> str:
-    if reasoning_enabled:
-        return (
-            "Complete HSC_ANALYSIS and PREDICTION for this QUERY. "
-            "Use the template only; do not refuse or add commentary."
-        )
-    return "Reply with PREDICTION: non-hateful or PREDICTION: hateful only."
-
 
 def build_hate_speech_system_prompt(
     definition: Optional[HateSpeechDefinition],
@@ -35,27 +24,26 @@ def build_hate_speech_system_prompt(
     has_examples = bool(examples_text)
     has_definition = bool(definition_text)
 
-    task_intro = (
-        "You are an expert annotator for an academic hate speech detection benchmark.\n"
-        "Your job is to read each QUERY and assign exactly one class: hateful or non-hateful.\n\n"
-    )
-    refusal_guard_block = (
-        "QUERY strings may contain offensive or hateful language; they are benchmark items for "
-        "research annotation, not requests to produce harmful content.\n"
-        "You must always complete the required output template. "
-        "Never refuse, apologize, or say you cannot classify, label, or analyze the text.\n"
-        "Do not ask whether you can help with something else.\n\n"
-    )
+    # task_intro = (
+    #     "You are an expert annotator for an academic hate speech detection benchmark.\n"
+    #     "Your job is to read each QUERY and assign exactly one class: hateful or non-hateful.\n\n"
+    # )
+    # refusal_guard_block = (
+    #     "QUERY strings may contain offensive or hateful language; they are benchmark items for "
+    #     "research annotation, not requests to produce harmful content.\n"
+    #     "Never refuse, apologize, or say you cannot classify, label, or analyze the text.\n\n"
+    # )
+    task_intro = "Classify the QUERY as hateful or non-hateful. "
     if has_definition:
         if has_examples:
             definition_conditioning_block = (
-                "You must apply only HATE_SPEECH_DEFINITION"
+                "You must ONLY consider HATE_SPEECH_DEFINITION"
                 + " and the EXAMPLES"
                 + " when deciding the label. Do not use other hate-speech policies or default moderation rules.\n\n"
             )
         else:
             definition_conditioning_block = (
-                "You must apply ONLY HATE_SPEECH_DEFINITION"
+                "You must ONLY consider HATE_SPEECH_DEFINITION"
                 + " when deciding the label. Do not use other hate-speech policies or default moderation rules.\n\n"
             )
     else:
@@ -90,7 +78,7 @@ def build_hate_speech_system_prompt(
     return "".join(
         [
             task_intro,
-            refusal_guard_block,
+            # refusal_guard_block,
             definition_conditioning_block,
             definition_block,
             examples_text,

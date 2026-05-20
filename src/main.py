@@ -1,10 +1,10 @@
 import yaml
 from data_utils import HateSpeechDataset
-from definitions import Domain, HateSpeechDefinition
-from model_utils import load_model, ModelKind
+from definitions import HateSpeechDefinition
+from model_utils import load_model
 from tqdm import tqdm
 from dotenv import load_dotenv
-from typing import Optional, Sequence
+from typing import Literal, Optional, Sequence
 
 import datasets
 from sklearn.metrics import classification_report, confusion_matrix
@@ -16,8 +16,8 @@ import shutil
 import random
 import numpy as np
 import gc
-from prompting import ZeroShotPrompting, FewShotPrompting, user_completion_nudge
-from chat_utils import build_chat_messages
+from prompting import ZeroShotPrompting, FewShotPrompting
+from chat_utils import build_prompt
 from model_utils import load_embedding_model
 import traceback
 load_dotenv()
@@ -107,19 +107,6 @@ def _experiment_timing(
 
     return fmt(elapsed), fmt(remaining_secs)
 
-
-def definitions_for_dataset(
-    dataset: HateSpeechDataset,
-    extra_definitions: list[tuple[HateSpeechDefinition, dict]],
-) -> list[HateSpeechDefinition]:
-    """Dataset-specific definitions plus extras scoped by ``apply_to_datasets``."""
-    definitions = list(dataset.hate_speech_definitions)
-    for definition, spec in extra_definitions:
-        apply_to = spec.get("apply_to_datasets")
-        if apply_to is None or dataset.name in apply_to:
-            definitions.append(definition)
-    return definitions
-
 def save_confusion_matrix(y_true, y_pred, path_txt: str, class_labels: list[str] = ["non-hateful", "hateful"]):
     cm = confusion_matrix(y_true, y_pred, labels=class_labels)
     cm_df = pd.DataFrame(cm, index=class_labels, columns=class_labels)
@@ -135,7 +122,7 @@ def predict(
     model,
     tokenizer,
     system_prompt: str,
-    model_kind: ModelKind = "causal",
+    model_kind: Literal["causal", "seq2seq"] = "causal",
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
@@ -182,7 +169,7 @@ def predict(
         batch_texts = [item["text"] for item in batch]
 
         prompt_strings = [
-            build_chat_messages(tokenizer, system_prompt, item["text"])
+            build_prompt(tokenizer, system_prompt, item["text"])
             for item in batch
         ]
         inputs = tokenizer(
@@ -230,10 +217,9 @@ def predict(
                     pred_start = 0
 
             prediction = tokenizer.decode(new_tokens[pred_start:], skip_special_tokens=True).strip().lower()
-            p = prediction
-            if "non-hateful" in p or "non hateful" in p or p in ("non-hateful", "non hateful"):
+            if "non-hateful" in prediction or "non hateful" in prediction or prediction in ("non-hateful", "non hateful"):
                 answer = "non-hateful"
-            elif p == "hateful" or p.startswith("hateful") or p in ("hate speech", "hate-speech"):
+            elif prediction == "hateful" or prediction.startswith("hateful") or prediction in ("hate speech", "hate-speech"):
                 answer = "hateful"
             else:
                 answer = None
@@ -317,21 +303,12 @@ if __name__ == "__main__":
     print(f"Seed set to: {seed}")
     print(f"Generation config: {generation_config}")
 
-    domain = None
-    domain_path = config.get("hate_speech_criteria_domain")
-    if domain_path:
-        try:
-            domain = Domain.load(domain_path)
-            print(f"Domain loaded from {domain_path} with {sum(1 for _ in domain.iter_leaves())} leaf aspects.")
-        except Exception as e:
-            print(f"Error loading domain from {domain_path}: {e}")
-
     datasets_list = []
     for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
-        for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"]:
+        for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"] + config.get("extra_hate_speech_definitions", []):
             try:
-                definition = HateSpeechDefinition.load_definition(hate_speech_definition, domain=domain)
+                definition = HateSpeechDefinition.load_definition(hate_speech_definition)
             except Exception as e:
                 print(f"Error loading definition {hate_speech_definition.get('type')}: {e}")
                 continue
@@ -384,16 +361,6 @@ if __name__ == "__main__":
     print("Prompting methods loaded")
     print(*[f"{prompting_method.name}" for prompting_method in prompting])
 
-
-    extra_definitions: list[tuple[HateSpeechDefinition, dict]] = []
-    for spec in config.get("extra_hate_speech_definitions") or []:
-        try:
-            extra_definitions.append(
-                (HateSpeechDefinition.load_definition(spec, domain=domain), spec)
-            )
-        except Exception as e:
-            print(f"Error loading extra definition {spec.get('type')}: {e}")
-
     print("-" * 100)
     dataset_names = []
     model_names = []
@@ -402,7 +369,7 @@ if __name__ == "__main__":
     macro_f1_scores = []
     percentage_of_problematic_generations = []
     total_num_experiments = len(model_paths) * len(prompting) * sum(
-        len(definitions_for_dataset(dataset, extra_definitions)) for dataset in datasets_list
+        len(dataset.hate_speech_definitions) for dataset in datasets_list
     )
     print(f"Total number of experiments: {total_num_experiments}\n")
     experiment_number = 1
@@ -413,7 +380,7 @@ if __name__ == "__main__":
         for dataset in datasets_list:
             model_name = model_path.replace("/", "_")
             for prompting_method in prompting:
-                for definition in definitions_for_dataset(dataset, extra_definitions):
+                for definition in dataset.hate_speech_definitions:
                     batch_size = 8
                     while True:
                         experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
