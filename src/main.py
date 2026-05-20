@@ -126,6 +126,7 @@ def predict(
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
+    compute_confidence_score: bool = False,
     num_generation_retries: int = 4,
     retry_number: int = 0
 ):
@@ -188,17 +189,23 @@ def predict(
             generation_kwargs["temperature"] = temperature
             generation_kwargs["top_p"] = top_p
 
+        attention_mask = inputs.get("attention_mask")
+        if attention_mask is None:
+            attention_mask = torch.ones_like(inputs["input_ids"], device=DEVICE)
+
         with torch.no_grad():
             outputs = model.generate(
-                output_scores=True,
+                input_ids=inputs["input_ids"],
+                attention_mask=attention_mask,
+                output_scores=compute_confidence_score,
                 return_dict_in_generate=True,
-                **inputs,
                 **generation_kwargs,
             )
 
         prompt_len = 0 if model_kind == "seq2seq" else int(inputs["input_ids"].shape[1])
         sequences = outputs.sequences.detach().cpu()
-        scores = torch.stack([s.detach().cpu() for s in outputs.scores], dim=1)
+        if compute_confidence_score:
+            scores = torch.stack([s.detach().cpu() for s in outputs.scores], dim=1)
         del outputs, inputs
         if DEVICE.type == "cuda":
             torch.cuda.empty_cache()
@@ -234,12 +241,15 @@ def predict(
                 )
                 continue
 
-            token_offset = 0 if model_kind == "seq2seq" else prompt_len
-            confidence_score = calculate_confidence_score(
-                scores[j][pred_start:, :],
-                sequences[j, token_offset + pred_start :],
-                excluded_token_ids=special_ids if special_ids.numel() else None,
-            )
+            if compute_confidence_score:
+                token_offset = 0 if model_kind == "seq2seq" else prompt_len
+                confidence_score = calculate_confidence_score(
+                    scores[j][pred_start:, :],
+                    sequences[j, token_offset + pred_start :],
+                    excluded_token_ids=special_ids if special_ids.numel() else None,
+                )
+            else:
+                confidence_score = None
             predictions.append(answer)
             confidence_scores.append(confidence_score)
             texts.append(batch_texts[j])
@@ -306,7 +316,7 @@ if __name__ == "__main__":
     datasets_list = []
     for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
-        for hate_speech_definition in config["datasets"][dataset_name]["hate_speech_definitions"] + config.get("extra_hate_speech_definitions", []):
+        for hate_speech_definition in config["datasets"][dataset_name].get("hate_speech_definitions", []) + config.get("extra_hate_speech_definitions", []):
             try:
                 definition = HateSpeechDefinition.load_definition(hate_speech_definition)
             except Exception as e:
@@ -354,7 +364,7 @@ if __name__ == "__main__":
                     print(f"Error loading embedding model {prompting_config['embedding_model_path']}: {e}")
             else:
                 embedding_model = None
-            prompting.append(FewShotPrompting(name=prompting_config["name"], reasoning_enabled=prompting_config["reasoning_enabled"], num_shots=prompting_config["num_shots"], few_shot_mode=prompting_config["few_shot_mode"], embedding_model=embedding_model))
+            prompting.append(FewShotPrompting(name=prompting_config["name"], reasoning_enabled=prompting_config["reasoning_enabled"], num_shots_per_group=prompting_config["num_shots_per_group"], few_shot_mode=prompting_config["few_shot_mode"], embedding_model=embedding_model))
         else:
             raise ValueError(f"Invalid prompting type: {prompting_config['type']}")
 
@@ -415,7 +425,8 @@ if __name__ == "__main__":
                                 num_batches=1 if debug_mode else 1e9,
                                 batch_size=batch_size,
                                 generation_config=generation_config,
-                                num_generation_retries=config.get("num_generation_retries", 5),
+                                compute_confidence_score=config.get("compute_confidence_score", False),
+                                num_generation_retries=config.get("num_generation_retries", 4),
                             )
                             print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
                             print(problematic_generations_df)

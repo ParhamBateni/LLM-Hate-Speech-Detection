@@ -8,6 +8,8 @@ import random
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances_argmin
 from sentence_transformers import SentenceTransformer
+import umap
+from sklearn.preprocessing import normalize
 
 def build_hate_speech_system_prompt(
     definition: Optional[HateSpeechDefinition],
@@ -34,6 +36,8 @@ def build_hate_speech_system_prompt(
     #     "Never refuse, apologize, or say you cannot classify, label, or analyze the text.\n\n"
     # )
     task_intro = "Classify the QUERY as hateful or non-hateful. "
+    refusal_guard_block = "Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.\n\n"
+    
     if has_definition:
         if has_examples:
             definition_conditioning_block = (
@@ -68,17 +72,19 @@ def build_hate_speech_system_prompt(
         if reasoning_enabled and has_definition
         else ""
     )
+    
     output_format_block = (
         "Respond ONLY in the following format:\n"
         "PREDICTION: non-hateful\n"
         "or\n"
         "PREDICTION: hateful\n\n"
-        "Do not add any other text.\n\n"
+        "do not add any other text."
     )
+    
     return "".join(
         [
             task_intro,
-            # refusal_guard_block,
+            refusal_guard_block,
             definition_conditioning_block,
             definition_block,
             examples_text,
@@ -136,12 +142,12 @@ class FewShotPrompting(Prompting):
         self,
         name: str,
         reasoning_enabled: bool = False,
-        num_shots: int = 10,
+        num_shots_per_group: int = 5,
         few_shot_mode: FewShotMode = FewShotMode.RANDOM,
         embedding_model: Optional[SentenceTransformer] = None,
     ):
         super().__init__(name, reasoning_enabled)
-        self._num_shots = num_shots
+        self._num_shots_per_group = num_shots_per_group
         self._few_shot_mode = few_shot_mode
         if few_shot_mode == self.FewShotMode.SMART:
             if embedding_model is None:
@@ -160,28 +166,23 @@ class FewShotPrompting(Prompting):
             if example[1] not in grouped_examples:
                 grouped_examples[example[1]] = []
             grouped_examples[example[1]].append((example[0], example[1]))
-        num_examples_per_group = self._num_shots // len(grouped_examples)
         selected = []
         if self._few_shot_mode == self.FewShotMode.RANDOM:
-            for i, group in enumerate(grouped_examples):
-                num_group_samples = num_examples_per_group
-                if i == len(grouped_examples) - 1:
-                    num_group_samples += self._num_shots % len(grouped_examples)
+            for group in sorted(list(grouped_examples.keys()),reverse=True):
                 selected.extend(
-                    random.sample(grouped_examples[group], num_group_samples)
+                    random.sample(grouped_examples[group], self._num_shots_per_group)
                 )
         elif self._few_shot_mode == self.FewShotMode.SMART:
-            for i, group in enumerate(sorted(list(grouped_examples.keys()),reverse=True)):
+            for group in sorted(list(grouped_examples.keys()),reverse=True):
                 group_embeddings = self._embedding_model.encode(
                     [example[0] for example in grouped_examples[group]]
                 )
-                num_group_samples = num_examples_per_group
-                if i == len(grouped_examples) - 1:
-                    num_group_samples += self._num_shots % len(grouped_examples)
-                kmeans = KMeans(n_clusters=num_group_samples)
-                _labels = kmeans.fit_predict(group_embeddings)
+                normalized_group_embeddings = normalize(group_embeddings)
+                umap_embeddings = umap.UMAP(n_components=2, min_dist=0.0, metric="cosine").fit_transform(normalized_group_embeddings)
+                kmeans = KMeans(n_clusters=self._num_shots_per_group)
+                _labels = kmeans.fit_predict(umap_embeddings)
                 centroids = kmeans.cluster_centers_
-                closest_indices = pairwise_distances_argmin(centroids, group_embeddings)
+                closest_indices = pairwise_distances_argmin(centroids, umap_embeddings)
                 selected.extend(
                     [
                         (

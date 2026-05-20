@@ -162,39 +162,107 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         return CriteriaHateSpeechDefinition(name, target_groups, dominance, dominance_groups, perpetrator_characteristics, explicit_reference, insults_group, effects_consequences)
 
     def prompt_text(self) -> str:
-        parts = []
-        parts.append("Hate speech is defined as language targetted at a person or group")
-        excluded_target_groups = set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN) - set(self._target_groups)
+        """
+        Render a criteria definition with explicit **inclusions** vs **not required** wording.
+
+        Phrases like ``does not incite X`` read as ``hate speech never involves X``, which is wrong:
+        here ``X`` is **out of scope for this benchmark slice**—the label does not *require* X.
+        """
+        lines: list[str] = []
+        excluded_target_groups = sorted(
+            set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN) - set(self._target_groups)
+        )
         if self._target_groups:
-            parts.append(f"based on their {', '.join(self._target_groups)} (not their {', '.join(excluded_target_groups)})")
+            lines.append(
+                "Hate speech (under this definition) is abusive or hostile language directed at a person or group "
+                f"because of one or more of these traits: {', '.join(self._target_groups)}."
+            )
+            lines.append(
+                "Attacks that target someone only on grounds outside that list (with no clear link to those traits) "
+                f"are not hate speech under this definition. Traits outside this list for targeting purposes: "
+                f"{', '.join(excluded_target_groups)}."
+            )
         else:
-            parts.append(f"(not based on their {', '.join(excluded_target_groups)})")
+            lines.append(
+                "Hate speech (under this definition) is not specified via target-group traits in this configuration."
+            )
+
         if self._dominance:
-            parts.append(f"from both dominant and non-dominant groups.")
+            lines.append(
+                "Dominance: both dominant and non-dominant groups can be targets under this definition."
+            )
         else:
-            parts.append(f"from only non-dominant groups.")
+            lines.append(
+                "Dominance: only non-dominant groups are in scope. Abuse aimed solely at dominant groups "
+                "(e.g. generic attacks on white people or men as dominant-class stand-ins) is not hate speech "
+                "under this definition."
+            )
         if self._dominance_groups:
-            parts.append(f"Dominant groups are defined as {', '.join(self._dominance_groups)}.")
-        parts.append("Our definition of hate speech")
-        if self._insults_group:
-            parts.append("insults a group and")
-        excluded_effects_consequences = set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN) - set(self._effects_consequences)
+            lines.append(
+                f"Dominant groups explicitly named in this definition: {', '.join(self._dominance_groups)}."
+            )
+
+        not_required: list[str] = []
+
+        excluded_effects = sorted(
+            set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN) - set(self._effects_consequences)
+        )
         if self._effects_consequences:
-            parts.append(f"incites {', '.join(self._effects_consequences)} (not {', '.join(excluded_effects_consequences)})")
+            not_required.append(
+                f"Incitement: the definition may treat these as relevant when present: "
+                f"{', '.join(self._effects_consequences)}. It does not require incitement of: "
+                f"{', '.join(excluded_effects)}."
+            )
         else:
-            parts.append(f"does not incite {', '.join(excluded_effects_consequences)}")
-        excluded_explicit_reference = set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN) - set(self._explicit_reference)
+            not_required.append(
+                "Incitement: you do not need discrimination, hate, or violence to be present or incited "
+                "for the utterance to count as hateful; hostile targeting on the included traits can be enough."
+            )
+
+        excluded_explicit = sorted(
+            set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN) - set(self._explicit_reference)
+        )
         if self._explicit_reference:
-            parts.append(f"through the usage of {', '.join(self._explicit_reference)} (not {', '.join(excluded_explicit_reference)}).")
+            not_required.append(
+                f"Explicit reference: the definition may require {', '.join(self._explicit_reference)}. "
+                f"It does not require: {', '.join(excluded_explicit)}."
+            )
         else:
-            parts.append(f"and does not explicitly reference {', '.join(excluded_explicit_reference)}.")
-        excluded_perpetrator_characteristics = set(CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN) - set(self._perpetrator_characteristics)
-        parts.append("Our definition of hate speech is")
+            not_required.append(
+                "Slurs / stereotypes: you do not need a slur, stereotype, or explicit group-characteristic "
+                "reference for the hateful label; general hostility toward the group on the included traits can suffice."
+            )
+
+        excluded_perp = sorted(
+            set(CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN)
+            - set(self._perpetrator_characteristics)
+        )
         if self._perpetrator_characteristics:
-            parts.append(f"based on the perpetrator's characteristics of {', '.join(self._perpetrator_characteristics)} (not {', '.join(excluded_perpetrator_characteristics)}).")
+            not_required.append(
+                f"Perpetrator: the definition may depend on {', '.join(self._perpetrator_characteristics)}. "
+                f"It does not require: {', '.join(excluded_perp)}."
+            )
         else:
-            parts.append(f"not based on the perpetrator's characteristics of {', '.join(excluded_perpetrator_characteristics)}.")
-        return " ".join(parts)
+            not_required.append(
+                "Perpetrator: you do not need to infer the speaker's dominance, societal role, or membership "
+                "in the target group; the label is about the content toward the target, not those speaker traits."
+            )
+
+        if self._insults_group:
+            lines.append(
+                "Group insult: the definition requires that the language insults the targeted group "
+                "(not merely disagrees with an individual in a neutral way)."
+            )
+        else:
+            not_required.append(
+                "Group insult: you do not need a direct insult formula (e.g. X are scum); other hostile group "
+                "targeting on the included traits can still count."
+            )
+
+        lines.append("Not required for the hateful label (do not treat absence as proof of non-hateful):")
+        lines.extend(f"- {s}" for s in not_required)
+
+        return "\n".join(lines)
 
     @staticmethod
     def TYPE() -> str:

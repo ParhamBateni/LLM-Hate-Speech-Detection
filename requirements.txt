@@ -8,3 +8,4 @@ pandas
 scikit-learn
 tqdm
 dotenv
+umap-learn

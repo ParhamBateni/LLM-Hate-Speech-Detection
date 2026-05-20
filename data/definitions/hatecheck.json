@@ -13,7 +13,7 @@
       "religion",
       "sexual orientation"
     ],
-  "dominance": false,
+  "dominance": true,
   "dominance_groups": [],
   "perpetrator_characteristics": [],
   "explicit_reference": [],

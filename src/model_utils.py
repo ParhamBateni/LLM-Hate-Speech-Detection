@@ -4,7 +4,6 @@ from typing import Literal
 import torch
 import transformers
 from sentence_transformers import SentenceTransformer
-import shutil
 CACHE_DIR = "cache"
 TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
 

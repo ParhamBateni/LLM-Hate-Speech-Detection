@@ -5,6 +5,7 @@ def build_prompt(
 ) -> str:
     """Build a prompt string for the model (chat template or plain text for T5)."""
     ct = getattr(tokenizer, "chat_template", None)
+    user_text = user_text.replace('"', "'")
     query = f'QUERY: "{user_text}"'
     if ct is None or isinstance(ct, str) and "System role not supported" in ct:
         return f'{system_prompt.strip()}\n\n{query}'
