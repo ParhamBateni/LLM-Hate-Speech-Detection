@@ -13,10 +13,10 @@
       "religion",
       "sexual orientation"
     ],
-  "dominance": true,
+  "dominance": false,
   "dominance_groups": [],
   "perpetrator_characteristics": [],
-  "explicit_reference": [],
-  "insults_group": false,
-  "effects_consequences": []
+  "explicit_reference": ["group characteristic", "slur", "stereotype"],
+  "insults_group": true,
+  "effects_consequences": ["discrimination", "hate", "violence"]
 }

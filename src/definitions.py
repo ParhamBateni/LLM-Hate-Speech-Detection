@@ -161,6 +161,10 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
 
         return CriteriaHateSpeechDefinition(name, target_groups, dominance, dominance_groups, perpetrator_characteristics, explicit_reference, insults_group, effects_consequences)
 
+    @staticmethod
+    def _aspect_line(aspect: str, side: str, text: str) -> str:
+        return f"{aspect}. {side}: {text}"
+
     def prompt_text(self) -> str:
         """
         Render a criteria definition with explicit **inclusions** vs **not required** wording.
@@ -169,68 +173,150 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         here ``X`` is **out of scope for this benchmark slice**—the label does not *require* X.
         """
         lines: list[str] = []
+        aspect = self._aspect_line
+        lines.append(
+            "Hate speech (under this definition) is abusive or hostile language; "
+            "a sample is hateful only if it satisfies the included criteria below."
+        )
+
         excluded_target_groups = sorted(
             set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN) - set(self._target_groups)
         )
         if self._target_groups:
             lines.append(
-                "Hate speech (under this definition) is abusive or hostile language directed at a person or group "
-                f"because of one or more of these traits: {', '.join(self._target_groups)}."
+                aspect(
+                    "Target groups",
+                    "Included (hateful samples must target someone on at least one of these traits)",
+                    ", ".join(self._target_groups),
+                )
             )
-            lines.append(
-                "Attacks that target someone only on grounds outside that list (with no clear link to those traits) "
-                f"are not hate speech under this definition. Traits outside this list for targeting purposes: "
-                f"{', '.join(excluded_target_groups)}."
-            )
+            if excluded_target_groups:
+                lines.append(
+                    aspect(
+                        "Target groups",
+                        "Excluded (targeting only on these grounds, with no clear link to included traits, is not hateful)",
+                        ", ".join(excluded_target_groups),
+                    )
+                )
         else:
             lines.append(
-                "Hate speech (under this definition) is not specified via target-group traits in this configuration."
+                aspect(
+                    "Target groups",
+                    "Included",
+                    "not specified in this configuration",
+                )
             )
+            if excluded_target_groups:
+                lines.append(
+                    aspect(
+                        "Target groups",
+                        "Excluded",
+                        ", ".join(excluded_target_groups) if excluded_target_groups else "none listed",
+                    )
+                )
 
         if self._dominance:
+            included_dominance = "both dominant and non-dominant groups"
+            if self._dominance_groups:
+                included_dominance += f"; dominant groups explicitly named: {', '.join(self._dominance_groups)}"
             lines.append(
-                "Dominance: both dominant and non-dominant groups can be targets under this definition."
+                aspect(
+                    "Dominance",
+                    "Included (hateful samples may target)",
+                    included_dominance,
+                )
             )
         else:
             lines.append(
-                "Dominance: only non-dominant groups are in scope. Abuse aimed solely at dominant groups "
-                "(e.g. generic attacks on white people or men as dominant-class stand-ins) is not hate speech "
-                "under this definition."
+                aspect(
+                    "Dominance",
+                    "Included (hateful samples may target)",
+                    "non-dominant groups only",
+                )
             )
-        if self._dominance_groups:
-            lines.append(
-                f"Dominant groups explicitly named in this definition: {', '.join(self._dominance_groups)}."
+            excluded_dominance = (
+                "abuse aimed solely at dominant groups "
+                "(e.g. generic attacks on white people or men as dominant-class stand-ins)"
             )
-
-        not_required: list[str] = []
+            if self._dominance_groups:
+                excluded_dominance += f"; named dominant groups out of scope: {', '.join(self._dominance_groups)}"
+            if excluded_dominance:
+                lines.append(
+                    aspect(
+                        "Dominance",
+                        "Excluded (not hateful under this definition)",
+                        excluded_dominance,
+                    )
+                )
 
         excluded_effects = sorted(
             set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN) - set(self._effects_consequences)
         )
         if self._effects_consequences:
-            not_required.append(
-                f"Incitement: the definition may treat these as relevant when present: "
-                f"{', '.join(self._effects_consequences)}. It does not require incitement of: "
-                f"{', '.join(excluded_effects)}."
+            lines.append(
+                aspect(
+                    "Effects/consequences",
+                    "Included (hateful samples must include at least one of)",
+                    ", ".join(self._effects_consequences),
+                )
             )
+            if excluded_effects:
+                lines.append(
+                    aspect(
+                        "Effects/consequences",
+                        "Excluded (not required for the hateful label)",
+                        ", ".join(excluded_effects) if excluded_effects else "none",
+                    )
+                )
         else:
-            not_required.append(
-                "Incitement: you do not need discrimination, hate, or violence to be present or incited "
-                "for the utterance to count as hateful; hostile targeting on the included traits can be enough."
+            lines.append(
+                aspect(
+                    "Effects/consequences",
+                    "Included (sufficient for hateful)",
+                    "hostile targeting on the included traits",
+                )
+            )
+            lines.append(
+                aspect(
+                    "Effects/consequences",
+                    "Excluded (not required)",
+                    ", ".join(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN),
+                )
             )
 
         excluded_explicit = sorted(
             set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN) - set(self._explicit_reference)
         )
         if self._explicit_reference:
-            not_required.append(
-                f"Explicit reference: the definition may require {', '.join(self._explicit_reference)}. "
-                f"It does not require: {', '.join(excluded_explicit)}."
+            lines.append(
+                aspect(
+                    "Explicit reference",
+                    "Included (hateful samples must include at least one of)",
+                    ", ".join(self._explicit_reference),
+                )
             )
+            if excluded_explicit:
+                lines.append(
+                    aspect(
+                        "Explicit reference",
+                        "Excluded (not required for the hateful label)",
+                        ", ".join(excluded_explicit) if excluded_explicit else "none",
+                    )
+                )
         else:
-            not_required.append(
-                "Slurs / stereotypes: you do not need a slur, stereotype, or explicit group-characteristic "
-                "reference for the hateful label; general hostility toward the group on the included traits can suffice."
+            lines.append(
+                aspect(
+                    "Explicit reference",
+                    "Included (sufficient for hateful)",
+                    "general hostility toward the group on the included traits",
+                )
+            )
+            lines.append(
+                aspect(
+                    "Explicit reference",
+                    "Excluded (not required)",
+                    ", ".join(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN),
+                )
             )
 
         excluded_perp = sorted(
@@ -238,29 +324,67 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             - set(self._perpetrator_characteristics)
         )
         if self._perpetrator_characteristics:
-            not_required.append(
-                f"Perpetrator: the definition may depend on {', '.join(self._perpetrator_characteristics)}. "
-                f"It does not require: {', '.join(excluded_perp)}."
+            lines.append(
+                aspect(
+                    "Perpetrator",
+                    "Included (hateful label depends on the speaker's)",
+                    ", ".join(self._perpetrator_characteristics),
+                )
             )
+            if excluded_perp:
+                lines.append(
+                    aspect(
+                        "Perpetrator",
+                        "Excluded (not required for the hateful label)",
+                        ", ".join(excluded_perp) if excluded_perp else "none",
+                    )
+                )
         else:
-            not_required.append(
-                "Perpetrator: you do not need to infer the speaker's dominance, societal role, or membership "
-                "in the target group; the label is about the content toward the target, not those speaker traits."
+            lines.append(
+                aspect(
+                    "Perpetrator",
+                    "Included (what matters for the label)",
+                    "the content toward the target, not speaker traits",
+                )
+            )
+            lines.append(
+                aspect(
+                    "Perpetrator",
+                    "Excluded (not required)",
+                    ", ".join(CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN),
+                )
             )
 
         if self._insults_group:
             lines.append(
-                "Group insult: the definition requires that the language insults the targeted group "
-                "(not merely disagrees with an individual in a neutral way)."
+                aspect(
+                    "Group insult",
+                    "Included (required for hateful)",
+                    "language that insults the targeted group (not merely disagrees with an individual in a neutral way)",
+                )
+            )
+            lines.append(
+                aspect(
+                    "Group insult",
+                    "Excluded (not sufficient for hateful)",
+                    "neutral disagreement with an individual without group-directed insult",
+                )
             )
         else:
-            not_required.append(
-                "Group insult: you do not need a direct insult formula (e.g. X are scum); other hostile group "
-                "targeting on the included traits can still count."
+            lines.append(
+                aspect(
+                    "Group insult",
+                    "Included (sufficient for hateful)",
+                    "other hostile group targeting on the included traits",
+                )
             )
-
-        lines.append("Not required for the hateful label (do not treat absence as proof of non-hateful):")
-        lines.extend(f"- {s}" for s in not_required)
+            lines.append(
+                aspect(
+                    "Group insult",
+                    "Excluded (not required)",
+                    "a direct insult formula (e.g. X are scum)",
+                )
+            )
 
         return "\n".join(lines)
 
