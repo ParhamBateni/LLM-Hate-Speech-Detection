@@ -409,7 +409,7 @@ if __name__ == "__main__":
                         )
 
                         if isinstance(prompting_method, FewShotPrompting): 
-                            system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)])
+                            system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)], random_state=seed)
                         else:
                             system_prompt = prompting_method.build_system_prompt(definition)
 

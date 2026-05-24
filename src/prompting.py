@@ -160,6 +160,7 @@ class FewShotPrompting(Prompting):
         self,
         definition: Optional[HateSpeechDefinition],
         examples: List[Tuple[str, str]],
+        random_state: int = 42,
     ) -> str:
         grouped_examples = {}
         for example in examples:
@@ -178,8 +179,17 @@ class FewShotPrompting(Prompting):
                     [example[0] for example in grouped_examples[group]]
                 )
                 normalized_group_embeddings = normalize(group_embeddings)
-                umap_embeddings = umap.UMAP(n_components=2, min_dist=0.0, metric="cosine").fit_transform(normalized_group_embeddings)
-                kmeans = KMeans(n_clusters=self._num_shots_per_group)
+                umap_embeddings = umap.UMAP(
+                    n_components=2,
+                    min_dist=0.0,
+                    metric="cosine",
+                    random_state=random_state,
+                    n_jobs=1
+                ).fit_transform(normalized_group_embeddings)
+                kmeans = KMeans(
+                    n_clusters=self._num_shots_per_group,
+                    random_state=random_state,
+                )
                 _labels = kmeans.fit_predict(umap_embeddings)
                 centroids = kmeans.cluster_centers_
                 closest_indices = pairwise_distances_argmin(centroids, umap_embeddings)
