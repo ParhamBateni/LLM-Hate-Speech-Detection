@@ -8,7 +8,7 @@ def build_prompt(
     user_text = user_text.replace('"', "'")
     query = f'QUERY: "{user_text}"'
     if ct is None or isinstance(ct, str) and "System role not supported" in ct:
-        return f'{system_prompt.strip()}\n\n{query}'
+        return f"{system_prompt.strip()}\n\n{query}"
     conversation = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query},

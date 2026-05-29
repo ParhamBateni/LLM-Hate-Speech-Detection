@@ -64,31 +64,23 @@ prompting:
   - type: "zero-shot"
     name: "zero-shot"
     reasoning_enabled: false
-  # - type: "zero-shot"
-  #   name: "zero-shot-reasoning"
-  #   reasoning_enabled: true
-  - type: "few-shot"
-    name: "few-shot-smart"
-    reasoning_enabled: false
-    num_shots_per_group: 4
-    few_shot_mode: "smart"
-    embedding_model_path: "BAAI/bge-small-en-v1.5"
-  # - type: "few-shot"
-  #   name: "few-shot-smart-reasoning"
-  #   reasoning_enabled: true
-  #   num_shots: 6
-  #   few_shot_mode: "smart"
-  #   embedding_model_path: "BAAI/bge-small-en-v1.5"
   - type: "few-shot"
     name: "few-shot-random"
     reasoning_enabled: false
     num_shots_per_group: 4
     few_shot_mode: "random"
-  # - type: "few-shot"
-  #   name: "few-shot-random-reasoning"
-  #   reasoning_enabled: true
-  #   num_shots: 6
-  #   few_shot_mode: "random"
+  - type: "few-shot"
+    name: "few-shot-diverse"
+    reasoning_enabled: false
+    num_shots_per_group: 4
+    few_shot_mode: "diverse"
+    embedding_model_path: "nomic-ai/nomic-embed-text-v1.5"
+  - type: "few-shot"
+    name: "few-shot-nearest-query"
+    reasoning_enabled: false
+    num_shots_per_group: 4
+    few_shot_mode: "nearest_query"
+    embedding_model_path: "nomic-ai/nomic-embed-text-v1.5"
 
 extra_hate_speech_definitions:
   - type: "vanilla"

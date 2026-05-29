@@ -4,8 +4,10 @@ from typing import Literal
 import torch
 import transformers
 from sentence_transformers import SentenceTransformer
+
 CACHE_DIR = "cache"
 TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+
 
 def model_kind_for_path(model_path: str) -> Literal["causal", "seq2seq"]:
     """Return ``seq2seq`` for encoder–decoder models (T5, BART, …), else ``causal``."""
@@ -17,7 +19,6 @@ def model_kind_for_path(model_path: str) -> Literal["causal", "seq2seq"]:
     if getattr(config, "is_encoder_decoder", False):
         return "seq2seq"
     return "causal"
-
 
 
 def load_model(model_path: str, device: torch.device) -> tuple:
@@ -60,4 +61,6 @@ def load_model(model_path: str, device: torch.device) -> tuple:
 
 
 def load_embedding_model(model_path: str, device: torch.device):
-    return SentenceTransformer(model_path, cache_folder=CACHE_DIR, token=TOKEN).to(device)
+    return SentenceTransformer(model_path, cache_folder=CACHE_DIR, token=TOKEN).to(
+        device
+    )

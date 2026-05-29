@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Any
 import json
 
+
 class HateSpeechDefinition(ABC):
     """
     Abstract base class for hate speech definitions.
@@ -98,12 +99,30 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
     validation and to :meth:`prompt_text` rendering, without code changes here.
     """
 
-    TARGET_GROUPS_DOMAIN = ["gender", "sexual orientation", "race", "color", "ethnicity", "nationality", "religion", "disability", "age", "language", "class", "familial status", "pregnancy"]
+    TARGET_GROUPS_DOMAIN = [
+        "gender",
+        "sexual orientation",
+        "race",
+        "color",
+        "ethnicity",
+        "nationality",
+        "religion",
+        "disability",
+        "age",
+        "language",
+        "class",
+        "familial status",
+        "pregnancy",
+    ]
     DOMINANCE_GROUPS_DOMAIN = ["white_people", "men"]
-    PERPETRATOR_CHARACTERISTICS_DOMAIN = ["dominance of group", "societal role", "member of target group"]
+    PERPETRATOR_CHARACTERISTICS_DOMAIN = [
+        "dominance of group",
+        "societal role",
+        "member of target group",
+    ]
     EXPLICIT_REFERENCE_DOMAIN = ["stereotype", "group characteristic", "slur"]
     EFFECTS_CONSEQUENCES_DOMAIN = ["violence", "hate", "discrimination"]
-    
+
     def __init__(
         self,
         name: str,
@@ -125,18 +144,43 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         self._effects_consequences = effects_consequences
         self._validate()
 
-
     def _validate(self):
-        if not all(group in CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN for group in self._target_groups):
-            raise ValueError(f"Invalid target groups: {self._target_groups}. Expected one of: {CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN}")
-        if not all(group in CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN for group in self._dominance_groups):
-            raise ValueError(f"Invalid dominance groups: {self._dominance_groups}. Expected one of: {CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN}")
-        if not all(characteristic in CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN for characteristic in self._perpetrator_characteristics):
-            raise ValueError(f"Invalid perpetrator characteristics: {self._perpetrator_characteristics}. Expected one of: {CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN}")
-        if not all(reference in CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN for reference in self._explicit_reference):
-            raise ValueError(f"Invalid explicit reference: {self._explicit_reference}. Expected one of: {CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN}")
-        if not all(consequence in CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN for consequence in self._effects_consequences):
-            raise ValueError(f"Invalid effects/consequences: {self._effects_consequences}. Expected one of: {CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN}")
+        if not all(
+            group in CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN
+            for group in self._target_groups
+        ):
+            raise ValueError(
+                f"Invalid target groups: {self._target_groups}. Expected one of: {CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN}"
+            )
+        if not all(
+            group in CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN
+            for group in self._dominance_groups
+        ):
+            raise ValueError(
+                f"Invalid dominance groups: {self._dominance_groups}. Expected one of: {CriteriaHateSpeechDefinition.DOMINANCE_GROUPS_DOMAIN}"
+            )
+        if not all(
+            characteristic
+            in CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN
+            for characteristic in self._perpetrator_characteristics
+        ):
+            raise ValueError(
+                f"Invalid perpetrator characteristics: {self._perpetrator_characteristics}. Expected one of: {CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN}"
+            )
+        if not all(
+            reference in CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN
+            for reference in self._explicit_reference
+        ):
+            raise ValueError(
+                f"Invalid explicit reference: {self._explicit_reference}. Expected one of: {CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN}"
+            )
+        if not all(
+            consequence in CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN
+            for consequence in self._effects_consequences
+        ):
+            raise ValueError(
+                f"Invalid effects/consequences: {self._effects_consequences}. Expected one of: {CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN}"
+            )
 
     @staticmethod
     def _load_definition(
@@ -147,7 +191,9 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             target_groups = definition_config["target_groups"]
             dominance = definition_config["dominance"]
             dominance_groups = definition_config["dominance_groups"]
-            perpetrator_characteristics = definition_config["perpetrator_characteristics"]
+            perpetrator_characteristics = definition_config[
+                "perpetrator_characteristics"
+            ]
             explicit_reference = definition_config["explicit_reference"]
             insults_group = definition_config["insults_group"]
             effects_consequences = definition_config["effects_consequences"]
@@ -159,7 +205,16 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
                 f"Offending config: {definition_config}"
             ) from e
 
-        return CriteriaHateSpeechDefinition(name, target_groups, dominance, dominance_groups, perpetrator_characteristics, explicit_reference, insults_group, effects_consequences)
+        return CriteriaHateSpeechDefinition(
+            name,
+            target_groups,
+            dominance,
+            dominance_groups,
+            perpetrator_characteristics,
+            explicit_reference,
+            insults_group,
+            effects_consequences,
+        )
 
     @staticmethod
     def _aspect_line(aspect: str, side: str, text: str) -> str:
@@ -180,7 +235,8 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         )
 
         excluded_target_groups = sorted(
-            set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN) - set(self._target_groups)
+            set(CriteriaHateSpeechDefinition.TARGET_GROUPS_DOMAIN)
+            - set(self._target_groups)
         )
         if self._target_groups:
             lines.append(
@@ -211,7 +267,11 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
                     aspect(
                         "Target groups",
                         "Excluded",
-                        ", ".join(excluded_target_groups) if excluded_target_groups else "none listed",
+                        (
+                            ", ".join(excluded_target_groups)
+                            if excluded_target_groups
+                            else "none listed"
+                        ),
                     )
                 )
 
@@ -250,7 +310,8 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
                 )
 
         excluded_effects = sorted(
-            set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN) - set(self._effects_consequences)
+            set(CriteriaHateSpeechDefinition.EFFECTS_CONSEQUENCES_DOMAIN)
+            - set(self._effects_consequences)
         )
         if self._effects_consequences:
             lines.append(
@@ -285,7 +346,8 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             )
 
         excluded_explicit = sorted(
-            set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN) - set(self._explicit_reference)
+            set(CriteriaHateSpeechDefinition.EXPLICIT_REFERENCE_DOMAIN)
+            - set(self._explicit_reference)
         )
         if self._explicit_reference:
             lines.append(
@@ -351,7 +413,9 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
                 aspect(
                     "Perpetrator",
                     "Excluded (not required)",
-                    ", ".join(CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN),
+                    ", ".join(
+                        CriteriaHateSpeechDefinition.PERPETRATOR_CHARACTERISTICS_DOMAIN
+                    ),
                 )
             )
 
@@ -390,4 +454,4 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
 
     @staticmethod
     def TYPE() -> str:
-        return "criteria" 
+        return "criteria"

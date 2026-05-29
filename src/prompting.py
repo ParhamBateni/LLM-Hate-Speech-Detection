@@ -10,6 +10,8 @@ from sklearn.metrics.pairwise import pairwise_distances_argmin
 from sentence_transformers import SentenceTransformer
 import umap
 from sklearn.preprocessing import normalize
+import numpy as np
+
 
 def build_hate_speech_system_prompt(
     definition: Optional[HateSpeechDefinition],
@@ -37,7 +39,7 @@ def build_hate_speech_system_prompt(
     # )
     task_intro = "Classify the QUERY as hateful or non-hateful. "
     refusal_guard_block = "Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.\n\n"
-    
+
     if has_definition:
         if has_examples:
             definition_conditioning_block = (
@@ -58,7 +60,11 @@ def build_hate_speech_system_prompt(
         else:
             definition_conditioning_block = ""
 
-    definition_block = ("HATE_SPEECH_DEFINITION:\n" + definition_text + "\n\n") if definition_text else ""
+    definition_block = (
+        ("HATE_SPEECH_DEFINITION:\n" + definition_text + "\n\n")
+        if definition_text
+        else ""
+    )
     reasoning_block = (
         (
             "Before making a final prediction, reason about the label of the QUERY step by step using Hate Speech Criteria (HSC). Complete the template below for the QUERY using Hate Speech Criteria (HSC). "
@@ -72,7 +78,7 @@ def build_hate_speech_system_prompt(
         if reasoning_enabled and has_definition
         else ""
     )
-    
+
     output_format_block = (
         "Respond ONLY in the following format:\n"
         "PREDICTION: non-hateful\n"
@@ -80,7 +86,7 @@ def build_hate_speech_system_prompt(
         "PREDICTION: hateful\n\n"
         "do not add any other text."
     )
-    
+
     return "".join(
         [
             task_intro,
@@ -136,7 +142,8 @@ class ZeroShotPrompting(Prompting):
 class FewShotPrompting(Prompting):
     class FewShotMode(StrEnum):
         RANDOM = "random"
-        SMART = "smart"
+        DIVERSE = "diverse"
+        NEAREST_QUERY = "nearest_query"
 
     def __init__(
         self,
@@ -149,59 +156,144 @@ class FewShotPrompting(Prompting):
         super().__init__(name, reasoning_enabled)
         self._num_shots_per_group = num_shots_per_group
         self._few_shot_mode = few_shot_mode
-        if few_shot_mode == self.FewShotMode.SMART:
+        if few_shot_mode == self.FewShotMode.DIVERSE:
             if embedding_model is None:
-                raise ValueError("Embedding model is required for smart few-shot mode")
+                raise ValueError(
+                    "Embedding model is required for diverse few-shot mode"
+                )
+            self._embedding_model = embedding_model
+        elif few_shot_mode == self.FewShotMode.NEAREST_QUERY:
+            if embedding_model is None:
+                raise ValueError(
+                    "Embedding model is required for nearest query few-shot mode"
+                )
             self._embedding_model = embedding_model
         else:
             self._embedding_model = None
+        self._cache = {}
 
     def build_system_prompt(
         self,
         definition: Optional[HateSpeechDefinition],
-        examples: List[Tuple[str, str]],
+        examples: Optional[List[Tuple[str, str]]] = None,
         random_state: int = 42,
+        query: str = None,
+        use_cache: bool = False,
     ) -> str:
-        grouped_examples = {}
-        for example in examples:
-            if example[1] not in grouped_examples:
-                grouped_examples[example[1]] = []
-            grouped_examples[example[1]].append((example[0], example[1]))
+        if use_cache:
+            grouped_examples = self._cache.get("grouped_examples", {})
+            if not grouped_examples and not examples:
+                raise ValueError("Examples are not given and not cached")
+        if examples is not None:
+            grouped_examples = {}
+            for example in examples:
+                if example[1] not in grouped_examples:
+                    grouped_examples[example[1]] = []
+                grouped_examples[example[1]].append(example[0])
+            if (
+                use_cache
+                and self._cache.get("grouped_examples", {}) != grouped_examples
+            ):
+                self._cache = {}
+            self._cache["grouped_examples"] = grouped_examples
+
         selected = []
         if self._few_shot_mode == self.FewShotMode.RANDOM:
-            for group in sorted(list(grouped_examples.keys()),reverse=True):
-                selected.extend(
-                    random.sample(grouped_examples[group], self._num_shots_per_group)
-                )
-        elif self._few_shot_mode == self.FewShotMode.SMART:
-            for group in sorted(list(grouped_examples.keys()),reverse=True):
-                group_embeddings = self._embedding_model.encode(
-                    [example[0] for example in grouped_examples[group]]
-                )
-                normalized_group_embeddings = normalize(group_embeddings)
-                umap_embeddings = umap.UMAP(
-                    n_components=2,
-                    min_dist=0.0,
-                    metric="cosine",
-                    random_state=random_state,
-                    n_jobs=1
-                ).fit_transform(normalized_group_embeddings)
-                kmeans = KMeans(
-                    n_clusters=self._num_shots_per_group,
-                    random_state=random_state,
-                )
-                _labels = kmeans.fit_predict(umap_embeddings)
-                centroids = kmeans.cluster_centers_
-                closest_indices = pairwise_distances_argmin(centroids, umap_embeddings)
+            for group in sorted(list(grouped_examples.keys()), reverse=True):
+                rng = random.Random(random_state)
                 selected.extend(
                     [
                         (
-                            grouped_examples[group][idx][0],
-                            grouped_examples[group][idx][1],
+                            example,
+                            group,
+                        )
+                        for example in rng.sample(
+                            grouped_examples[group], self._num_shots_per_group
+                        )
+                    ]
+                )
+
+        elif self._few_shot_mode == self.FewShotMode.DIVERSE:
+            if use_cache:
+                centroids = self._cache.get("centroids", {})
+                normalized_embeddings = self._cache.get("normalized_embeddings", {})
+            else:
+                centroids = {}
+                normalized_embeddings = {}
+            for group in sorted(list(grouped_examples.keys()), reverse=True):
+                if group not in centroids or group not in normalized_embeddings:
+                    group_embeddings = self._embedding_model.encode(
+                        grouped_examples[group]
+                    )
+                    normalized_group_embeddings = normalize(group_embeddings)
+                    kmeans = KMeans(
+                        n_clusters=self._num_shots_per_group,
+                        random_state=random_state,
+                    )
+                    _labels = kmeans.fit_predict(normalized_group_embeddings)
+                    group_centroids = kmeans.cluster_centers_
+                    centroids[group] = group_centroids
+                    normalized_embeddings[group] = normalized_group_embeddings
+                else:
+                    normalized_group_embeddings = normalized_embeddings[group]
+                    group_centroids = centroids[group]
+                closest_indices = pairwise_distances_argmin(
+                    group_centroids, normalized_group_embeddings
+                )
+                selected.extend(
+                    [
+                        (
+                            grouped_examples[group][idx],
+                            group,
                         )
                         for idx in closest_indices
                     ]
                 )
+
+            self._cache["centroids"] = centroids
+            self._cache["normalized_embeddings"] = normalized_embeddings
+        elif self._few_shot_mode == self.FewShotMode.NEAREST_QUERY:
+            if query is None:
+                raise ValueError("Query is required for nearest query few-shot mode")
+            query_embedding = self._embedding_model.encode([query])
+            normalized_query_embedding = normalize(query_embedding)
+            if use_cache:
+                normalized_embeddings = self._cache.get("normalized_embeddings", {})
+            else:
+                normalized_embeddings = {}
+            for group in sorted(list(grouped_examples.keys()), reverse=True):
+                if group not in normalized_embeddings:
+                    group_embeddings = self._embedding_model.encode(
+                        grouped_examples[group]
+                    )
+                    normalized_group_embeddings = normalize(group_embeddings)
+                    normalized_embeddings[group] = normalized_group_embeddings
+                else:
+                    normalized_group_embeddings = normalized_embeddings[group]
+                index_query = -1
+                try:
+                    index_query = grouped_examples[group].index(query)
+                except ValueError:
+                    pass
+                closest_indices = np.argsort(
+                    np.linalg.norm(
+                        normalized_group_embeddings - normalized_query_embedding, axis=1
+                    )
+                )[: self._num_shots_per_group + 1]
+                closest_indices = [
+                    idx for idx in closest_indices if idx != index_query
+                ][: self._num_shots_per_group]
+                selected.extend(
+                    [
+                        (
+                            grouped_examples[group][idx],
+                            group,
+                        )
+                        for idx in closest_indices
+                    ]
+                )
+
+            self._cache["normalized_embeddings"] = normalized_embeddings
         else:
             raise ValueError(f"Invalid few-shot mode: {self._few_shot_mode}")
 

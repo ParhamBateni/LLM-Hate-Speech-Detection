@@ -16,10 +16,11 @@ import shutil
 import random
 import numpy as np
 import gc
-from prompting import ZeroShotPrompting, FewShotPrompting
+from prompting import ZeroShotPrompting, FewShotPrompting, Prompting
 from chat_utils import build_prompt
 from model_utils import load_embedding_model
 import traceback
+
 load_dotenv()
 
 
@@ -27,12 +28,14 @@ def read_config(config_path: str):
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
+
 def seed_everything(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
 
 def calculate_confidence_score(
     chosen_logits: torch.Tensor,
@@ -48,18 +51,18 @@ def calculate_confidence_score(
     machinery. With left-padded prompts, prompt padding is not in this slice
     anyway; this mainly drops trailing EOS and any rare special emissions.
     """
-    
+
     # Encoder–decoder models (e.g. T5) prepend a decoder-start token (often pad id 0)
     # without a corresponding entry in ``outputs.scores``, so ``len(token_ids)`` can
-    # be one greater than ``step_logits.shape[0]``. 
+    # be one greater than ``step_logits.shape[0]``.
     n_tok = int(chosen_ids.shape[0])
     n_step = int(chosen_logits.shape[0])
     if n_tok == n_step + 1:
-        chosen_ids=chosen_ids[1:]
+        chosen_ids = chosen_ids[1:]
     if n_tok > n_step + 1:
-        chosen_ids=chosen_ids[-n_step:]
+        chosen_ids = chosen_ids[-n_step:]
     else:
-        chosen_logits=chosen_logits[-n_tok:]
+        chosen_logits = chosen_logits[-n_tok:]
     if chosen_ids.shape[0] == 0:
         return float("nan")
 
@@ -76,7 +79,9 @@ def calculate_confidence_score(
     return np.round(float(torch.exp(log_probs_tokens.mean()).item()), 3)
 
 
-def _prediction_start_after_tags(new_tokens: torch.Tensor, tag_tensors: Sequence[torch.Tensor]) -> Optional[int]:
+def _prediction_start_after_tags(
+    new_tokens: torch.Tensor, tag_tensors: Sequence[torch.Tensor]
+) -> Optional[int]:
     """Index of first token *after* a recognized PREDICTION marker, or ``None``."""
     for tag in tag_tensors:
         n = tag.numel()
@@ -86,6 +91,7 @@ def _prediction_start_after_tags(new_tokens: torch.Tensor, tag_tensors: Sequence
             if torch.all(new_tokens[k : k + n] == tag):
                 return k + n
     return None
+
 
 def _experiment_timing(
     experiment_number: int, total_experiments: int, start_time: float
@@ -107,7 +113,10 @@ def _experiment_timing(
 
     return fmt(elapsed), fmt(remaining_secs)
 
-def save_confusion_matrix(y_true, y_pred, path_txt: str, class_labels: list[str] = ["non-hateful", "hateful"]):
+
+def save_confusion_matrix(
+    y_true, y_pred, path_txt: str, class_labels: list[str] = ["non-hateful", "hateful"]
+):
     cm = confusion_matrix(y_true, y_pred, labels=class_labels)
     cm_df = pd.DataFrame(cm, index=class_labels, columns=class_labels)
     cm_df.index.name = "label"
@@ -121,14 +130,14 @@ def predict(
     dataset: datasets.Dataset,
     model,
     tokenizer,
-    system_prompt: str,
+    prompting_method: Prompting,
     model_kind: Literal["causal", "seq2seq"] = "causal",
     batch_size: int = 8,
     num_batches: int = 1e9,
     generation_config: Optional[dict] = None,
     compute_confidence_score: bool = False,
     num_generation_retries: int = 4,
-    retry_number: int = 0
+    retry_number: int = 0,
 ):
     generation_config = generation_config or {}
     max_new_tokens = generation_config.get("max_new_tokens", 100)
@@ -149,15 +158,34 @@ def predict(
         num_samples = num_batches * batch_size
 
     special_ids = torch.tensor(
-        sorted({int(t) for t in getattr(tokenizer, "all_special_ids", []) if t is not None}),
+        sorted(
+            {int(t) for t in getattr(tokenizer, "all_special_ids", []) if t is not None}
+        ),
         dtype=torch.long,
     )
     prediction_tag_tensors = [
-        torch.tensor(tokenizer.encode(prefix, add_special_tokens=False), dtype=torch.long)
+        torch.tensor(
+            tokenizer.encode(prefix, add_special_tokens=False), dtype=torch.long
+        )
         for prefix in ("PREDICTION:", "\n\nPREDICTION:", "\nPREDICTION:")
     ]
 
     num_predict_batches = (num_samples + batch_size - 1) // batch_size
+    if (
+        isinstance(prompting_method, FewShotPrompting)
+        and prompting_method.few_shot_mode == FewShotPrompting.FewShotMode.NEAREST_QUERY
+    ):
+        system_prompt = None
+    else:
+        if isinstance(prompting_method, FewShotPrompting):
+            system_prompt = prompting_method.build_system_prompt(
+                definition=definition,
+                examples=[(item["text"], item["label"]) for item in list(dataset)],
+                random_state=seed,
+                use_cache=True,
+            )
+        else:
+            system_prompt = prompting_method.build_system_prompt(definition)
     for start in tqdm(
         range(0, num_samples, batch_size),
         desc=f"Predicting (Attempt {retry_number} of {num_generation_retries})",
@@ -169,10 +197,27 @@ def predict(
         batch_labels = [item["label"] for item in batch]
         batch_texts = [item["text"] for item in batch]
 
-        prompt_strings = [
-            build_prompt(tokenizer, system_prompt, item["text"])
-            for item in batch
-        ]
+        if system_prompt is None:
+            prompt_strings = [
+                build_prompt(
+                    tokenizer,
+                    prompting_method.build_system_prompt(
+                        definition=definition,
+                        examples=[
+                            (item["text"], item["label"]) for item in list(dataset)
+                        ],
+                        random_state=seed,
+                        query=item["text"],
+                        use_cache=True,
+                    ),
+                    item["text"],
+                )
+                for item in batch
+            ]
+        else:
+            prompt_strings = [
+                build_prompt(tokenizer, system_prompt, item["text"]) for item in batch
+            ]
         inputs = tokenizer(
             prompt_strings,
             return_tensors="pt",
@@ -188,6 +233,9 @@ def predict(
         if do_sample:
             generation_kwargs["temperature"] = temperature
             generation_kwargs["top_p"] = top_p
+        else:
+            generation_kwargs["temperature"] = 1.0
+            generation_kwargs["top_p"] = 1.0
 
         attention_mask = inputs.get("attention_mask")
         if attention_mask is None:
@@ -215,18 +263,34 @@ def predict(
             row = batch[j]
             row_id = row["id"] if isinstance(row, dict) and "id" in row else i
             new_tokens = sequences[j][prompt_len:]
-            pred_start = _prediction_start_after_tags(new_tokens, prediction_tag_tensors)
+            pred_start = _prediction_start_after_tags(
+                new_tokens, prediction_tag_tensors
+            )
             if pred_start is None:
                 # Fallback to checking if removing the first token helps finding 'PREDICTION'
                 prediction_tag_tensors = [p[1:] for p in prediction_tag_tensors]
-                pred_start = _prediction_start_after_tags(new_tokens, prediction_tag_tensors)
+                pred_start = _prediction_start_after_tags(
+                    new_tokens, prediction_tag_tensors
+                )
                 if pred_start is None:
                     pred_start = 0
 
-            prediction = tokenizer.decode(new_tokens[pred_start:], skip_special_tokens=True).strip().lower()
-            if "non-hateful" in prediction or "non hateful" in prediction or prediction in ("non-hateful", "non hateful"):
+            prediction = (
+                tokenizer.decode(new_tokens[pred_start:], skip_special_tokens=True)
+                .strip()
+                .lower()
+            )
+            if (
+                "non-hateful" in prediction
+                or "non hateful" in prediction
+                or prediction in ("non-hateful", "non hateful")
+            ):
                 answer = "non-hateful"
-            elif prediction == "hateful" or prediction.startswith("hateful") or prediction in ("hate speech", "hate-speech"):
+            elif (
+                prediction == "hateful"
+                or prediction.startswith("hateful")
+                or prediction in ("hate speech", "hate-speech")
+            ):
                 answer = "hateful"
             else:
                 answer = None
@@ -235,7 +299,9 @@ def predict(
                     {
                         "id": row_id,
                         "text": batch_texts[j],
-                        "answer": tokenizer.decode(new_tokens, skip_special_tokens=False),
+                        "answer": tokenizer.decode(
+                            new_tokens, skip_special_tokens=False
+                        ),
                         "label": batch_labels[j],
                     }
                 )
@@ -270,7 +336,10 @@ def predict(
     if len(problematic_generations) > 0 and retry_number < num_generation_retries:
         # Enabling sampling so that the model can generate more diverse responses which might help in generating the correct format of the response
         generation_config["do_sample"] = True
-        if generation_config.get("temperature") is None or generation_config["temperature"] == 0.0:
+        if (
+            generation_config.get("temperature") is None
+            or generation_config["temperature"] == 0.0
+        ):
             generation_config["temperature"] = 0.8
         if generation_config.get("top_p") is None or generation_config["top_p"] == 1.0:
             generation_config["top_p"] = 0.9
@@ -290,17 +359,21 @@ def predict(
         problematic_generations_df = problematic_generations_df2
     return predictions_df, problematic_generations_df
 
+
 if __name__ == "__main__":
     run_id = time.strftime("%m_%d_%H:%M:%S")
-    run_folder = os.path.join('runs', run_id)
+    run_folder = os.path.join("runs", run_id)
     os.makedirs(run_folder)
     print("Run ID: " + run_id)
 
     print("CUDA available: " + str(torch.cuda.is_available()))
     print("MPS available: " + str(torch.backends.mps.is_available()))
-    DEVICE = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-    print("Using device: " + str(DEVICE)
+    DEVICE = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
     )
+    print("Using device: " + str(DEVICE))
     config = read_config("config.yaml")
     shutil.copy("config.yaml", os.path.join(run_folder, "config.yaml"))
 
@@ -316,11 +389,17 @@ if __name__ == "__main__":
     datasets_list = []
     for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
-        for hate_speech_definition in config["datasets"][dataset_name].get("hate_speech_definitions", []) + config.get("extra_hate_speech_definitions", []):
+        for hate_speech_definition in config["datasets"][dataset_name].get(
+            "hate_speech_definitions", []
+        ) + config.get("extra_hate_speech_definitions", []):
             try:
-                definition = HateSpeechDefinition.load_definition(hate_speech_definition)
+                definition = HateSpeechDefinition.load_definition(
+                    hate_speech_definition
+                )
             except Exception as e:
-                print(f"Error loading definition {hate_speech_definition.get('type')}: {e}")
+                print(
+                    f"Error loading definition {hate_speech_definition.get('type')}: {e}"
+                )
                 continue
             definitions.append(definition)
         try:
@@ -348,23 +427,40 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error locating model path for {model_name}: {e}")
             continue
-    
+
     print("Models paths:")
     print(*[f"{name}: {model_paths[name]}" for name in model_paths])
 
     prompting = []
     for prompting_config in config["prompting"]:
         if prompting_config["type"] == "zero-shot":
-            prompting.append(ZeroShotPrompting(name=prompting_config["name"], reasoning_enabled=prompting_config["reasoning_enabled"]))
+            prompting.append(
+                ZeroShotPrompting(
+                    name=prompting_config["name"],
+                    reasoning_enabled=prompting_config["reasoning_enabled"],
+                )
+            )
         elif prompting_config["type"] == "few-shot":
             if "embedding_model_path" in prompting_config:
                 try:
-                    embedding_model = load_embedding_model(prompting_config["embedding_model_path"], DEVICE)
+                    embedding_model = load_embedding_model(
+                        prompting_config["embedding_model_path"], DEVICE
+                    )
                 except Exception as e:
-                    print(f"Error loading embedding model {prompting_config['embedding_model_path']}: {e}")
+                    print(
+                        f"Error loading embedding model {prompting_config['embedding_model_path']}: {e}"
+                    )
             else:
                 embedding_model = None
-            prompting.append(FewShotPrompting(name=prompting_config["name"], reasoning_enabled=prompting_config["reasoning_enabled"], num_shots_per_group=prompting_config["num_shots_per_group"], few_shot_mode=prompting_config["few_shot_mode"], embedding_model=embedding_model))
+            prompting.append(
+                FewShotPrompting(
+                    name=prompting_config["name"],
+                    reasoning_enabled=prompting_config["reasoning_enabled"],
+                    num_shots_per_group=prompting_config["num_shots_per_group"],
+                    few_shot_mode=prompting_config["few_shot_mode"],
+                    embedding_model=embedding_model,
+                )
+            )
         else:
             raise ValueError(f"Invalid prompting type: {prompting_config['type']}")
 
@@ -378,14 +474,18 @@ if __name__ == "__main__":
     definition_names = []
     macro_f1_scores = []
     percentage_of_problematic_generations = []
-    total_num_experiments = len(model_paths) * len(prompting) * sum(
-        len(dataset.hate_speech_definitions) for dataset in datasets_list
+    total_num_experiments = (
+        len(model_paths)
+        * len(prompting)
+        * sum(len(dataset.hate_speech_definitions) for dataset in datasets_list)
     )
     print(f"Total number of experiments: {total_num_experiments}\n")
     experiment_number = 1
     start_time = time.time()
     for model_path in model_paths:
-        current_model, current_tokenizer, model_kind = load_model(model_paths[model_path], DEVICE)
+        current_model, current_tokenizer, model_kind = load_model(
+            model_paths[model_path], DEVICE
+        )
         print(f"Model architecture: {model_kind}")
         for dataset in datasets_list:
             model_name = model_path.replace("/", "_")
@@ -393,7 +493,13 @@ if __name__ == "__main__":
                 for definition in dataset.hate_speech_definitions:
                     batch_size = 8
                     while True:
-                        experiment_folder = os.path.join(run_folder, dataset.name, model_name, definition.name, prompting_method.name)
+                        experiment_folder = os.path.join(
+                            run_folder,
+                            dataset.name,
+                            model_name,
+                            definition.name,
+                            prompting_method.name,
+                        )
                         os.makedirs(experiment_folder)
                         print("-" * 100)
                         elapsed_fmt, remaining_fmt = _experiment_timing(
@@ -408,29 +514,60 @@ if __name__ == "__main__":
                             f"prompting: {prompting_method.name}\n"
                         )
 
-                        if isinstance(prompting_method, FewShotPrompting): 
-                            system_prompt = prompting_method.build_system_prompt(definition, [(item["text"], item["label"]) for item in list(dataset)], random_state=seed)
-                        else:
-                            system_prompt = prompting_method.build_system_prompt(definition)
+                        if (
+                            isinstance(prompting_method, FewShotPrompting)
+                            and prompting_method.few_shot_mode
+                            != FewShotPrompting.FewShotMode.NEAREST_QUERY
+                            or not isinstance(prompting_method, FewShotPrompting)
+                        ):
+                            if isinstance(prompting_method, FewShotPrompting):
+                                system_prompt = prompting_method.build_system_prompt(
+                                    definition=definition,
+                                    examples=[
+                                        (item["text"], item["label"])
+                                        for item in list(dataset)
+                                    ],
+                                    random_state=seed,
+                                    use_cache=True,
+                                )
+                            else:
+                                system_prompt = prompting_method.build_system_prompt(
+                                    definition
+                                )
 
-                        with open(os.path.join(experiment_folder, "prompt.txt"), "w") as f:
-                            f.write(system_prompt)
+                            with open(
+                                os.path.join(experiment_folder, "prompt.txt"), "w"
+                            ) as f:
+                                f.write(system_prompt)
                         try:
                             predictions_df, problematic_generations_df = predict(
                                 dataset,
                                 current_model,
                                 current_tokenizer,
-                                system_prompt,
+                                prompting_method,
                                 model_kind=model_kind,
                                 num_batches=1 if debug_mode else 1e9,
                                 batch_size=batch_size,
                                 generation_config=generation_config,
-                                compute_confidence_score=config.get("compute_confidence_score", False),
-                                num_generation_retries=config.get("num_generation_retries", 4),
+                                compute_confidence_score=config.get(
+                                    "compute_confidence_score", False
+                                ),
+                                num_generation_retries=config.get(
+                                    "num_generation_retries", 4
+                                ),
                             )
-                            print("A total of " + str(len(problematic_generations_df)) + " problematic generations were found")
+                            print(
+                                "A total of "
+                                + str(len(problematic_generations_df))
+                                + " problematic generations were found"
+                            )
                             print(problematic_generations_df)
-                            problematic_generations_df.to_csv(os.path.join(experiment_folder, "problematic_generations.csv"), index=False)
+                            problematic_generations_df.to_csv(
+                                os.path.join(
+                                    experiment_folder, "problematic_generations.csv"
+                                ),
+                                index=False,
+                            )
                             text_report = classification_report(
                                 predictions_df["label"],
                                 predictions_df["prediction"],
@@ -447,14 +584,27 @@ if __name__ == "__main__":
                                 zero_division=0,
                                 output_dict=True,
                             )
-                            macro_f1_score = np.round(dict_report["macro avg"]["f1-score"], 3)
+                            macro_f1_score = np.round(
+                                dict_report["macro avg"]["f1-score"], 3
+                            )
                             dataset_names.append(dataset.name)
                             model_names.append(model_name)
                             definition_names.append(definition.name)
                             prompting_names.append(prompting_method.name)
                             macro_f1_scores.append(macro_f1_score)
-                            percentage_of_problematic_generations.append(np.round(len(problematic_generations_df) / len(predictions_df), 3))
-                            with open(os.path.join(experiment_folder, "classification_report.txt"), "w") as f:
+                            percentage_of_problematic_generations.append(
+                                np.round(
+                                    len(problematic_generations_df)
+                                    / len(predictions_df),
+                                    3,
+                                )
+                            )
+                            with open(
+                                os.path.join(
+                                    experiment_folder, "classification_report.txt"
+                                ),
+                                "w",
+                            ) as f:
                                 f.write(text_report)
                             save_confusion_matrix(
                                 predictions_df["label"],
@@ -463,17 +613,22 @@ if __name__ == "__main__":
                                 class_labels=["non-hateful", "hateful"],
                             )
                             if config["save_predictions"]:
-                                predictions_df.to_csv(os.path.join(experiment_folder, "predictions.csv"), index=False)
+                                predictions_df.to_csv(
+                                    os.path.join(experiment_folder, "predictions.csv"),
+                                    index=False,
+                                )
                             experiment_number += 1
                         except Exception as e:
-                            print('X'*100)
-                            print(f"Error running experiment {experiment_number}/{total_num_experiments}: {e}")
+                            print("X" * 100)
+                            print(
+                                f"Error running experiment {experiment_number}/{total_num_experiments}: {e}"
+                            )
                             traceback.print_exc()
-                       
-                            if 'memory' in str(e).lower():
+
+                            if "memory" in str(e).lower():
                                 print(f"Lowering the batch size to {batch_size // 2}")
                                 batch_size = batch_size // 2
-                                print('X'*100)
+                                print("X" * 100)
                                 continue
                         break
 
@@ -494,6 +649,3 @@ if __name__ == "__main__":
             "percentage_of_problematic_generations": percentage_of_problematic_generations,
         }
     ).to_csv(os.path.join(run_folder, "scores_comparison.csv"), index=False)
-
-
-
