@@ -215,10 +215,9 @@ class FewShotPrompting(Prompting):
                 centroids = {}
                 normalized_embeddings = {}
             for group in sorted(list(grouped_examples.keys()), reverse=True):
+                group_examples = grouped_examples[group]
                 if group not in centroids or group not in normalized_embeddings:
-                    group_embeddings = self._embedding_model.encode(
-                        grouped_examples[group]
-                    )
+                    group_embeddings = self._embedding_model.encode(group_examples)
                     normalized_group_embeddings = normalize(group_embeddings)
                     kmeans = KMeans(
                         n_clusters=self._num_shots_per_group,

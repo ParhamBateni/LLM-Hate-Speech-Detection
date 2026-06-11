@@ -139,6 +139,7 @@ def predict(
     compute_confidence_score: bool = False,
     num_generation_retries: int = 4,
     retry_number: int = 0,
+    few_shot_examples: Optional[list[tuple[str, str]]] = None,
 ):
     generation_config = generation_config or {}
     max_new_tokens = generation_config.get("max_new_tokens", 100)
@@ -157,6 +158,9 @@ def predict(
         num_samples = len(iterator)
     else:
         num_samples = num_batches * batch_size
+
+    if isinstance(prompting_method, FewShotPrompting) and few_shot_examples is None:
+        few_shot_examples = [(item["text"], item["label"]) for item in iterator]
 
     special_ids = torch.tensor(
         sorted(
@@ -181,7 +185,7 @@ def predict(
         if isinstance(prompting_method, FewShotPrompting):
             system_prompt = prompting_method.build_system_prompt(
                 definition=definition,
-                examples=[(item["text"], item["label"]) for item in list(dataset)],
+                examples=few_shot_examples,
                 random_state=seed,
                 use_cache=True,
             )
@@ -204,9 +208,7 @@ def predict(
                     tokenizer,
                     prompting_method.build_system_prompt(
                         definition=definition,
-                        examples=[
-                            (item["text"], item["label"]) for item in list(dataset)
-                        ],
+                        examples=few_shot_examples,
                         random_state=seed,
                         query=item["text"],
                         use_cache=True,
@@ -356,6 +358,7 @@ def predict(
             generation_config=generation_config,
             num_generation_retries=num_generation_retries,
             retry_number=retry_number + 1,
+            few_shot_examples=few_shot_examples,
         )
         predictions_df = pd.concat([predictions_df, predictions_df2])
         problematic_generations_df = problematic_generations_df2
