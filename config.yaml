@@ -13,52 +13,16 @@ datasets:
     - type: "criteria"
       name: "hatecheck_hsc"
       path: "data/definitions/hatecheck.json"
-  # mhs:
-  #   path: "data/datasets/MHS/MHS_processed.csv"
-  #   text_column: "text"
-  #   label_column: "final_label"
-  #   id_column: "comment_id"
-  #   hate_speech_definitions:
-      # - type: "vanilla"
-      #   name: "mhs_vanilla"
-      #   path: "data/definitions/mhs.json"
-  #     - type: "criteria"
-  #       name: "mhs_hsc"
-  #       path: "data/definitions/mhs.json"
-  #       include_definition_text: false
-  #     - type: "criteria"
-  #       name: "mhs_hsc_mixed"
-  #       path: "data/definitions/mhs.json"
-  #       include_definition_text: true
-  # hatexplain:
-  #   path: "data/datasets/HateXplain/HateXplain_processed.csv"
-  #   text_column: "text"
-  #   label_column: "final_label"
-  #   id_column: "post_id"
-  #   hate_speech_definitions:
-  #     - type: "vanilla"
-  #       name: "hatexplain_vanilla"
-  #       path: "data/definitions/hatexplain.json"
-      # - type: "criteria"
-      #   name: "hatexplain_hsc"
-      #   path: "data/definitions/hatexplain.json"
-      #   include_definition_text: false
-      # - type: "criteria"
-      #   name: "hatexplain_hsc_augmented"
-      #   path: "data/definitions/hatexplain.json"
-      #   include_definition_text: true
 
 models:
-  # gemma2_2b_it:
-  #   path: "google/gemma-2-2b-it"
-  # phi3_mini:
-  #   path: "microsoft/Phi-3.5-mini-instruct"
-  llama3_2_1b_instruct:
-    path: "meta-llama/Llama-3.2-1B-Instruct"
-  # llama3_2_3b_instruct:
-  #   path: "meta-llama/Llama-3.2-3B-Instruct"
-  # qwen2_5_3b_instruct:
-  #   path: "Qwen/Qwen2.5-3B-Instruct"
+  gemma2_2b_it:
+    path: "google/gemma-2-2b-it"
+  # llama3_2_1b_instruct:
+  #   path: "meta-llama/Llama-3.2-1B-Instruct"
+  llama3_2_3b_instruct:
+    path: "meta-llama/Llama-3.2-3B-Instruct"
+  qwen2_5_3b_instruct:
+    path: "Qwen/Qwen2.5-3B-Instruct"
 
 prompting:
   - type: "zero-shot"
@@ -87,7 +51,7 @@ extra_hate_speech_definitions:
     name: "no_definition"
     definition_text: ""
 
-debug_mode: true
+debug_mode: false
 save_predictions: true
 compute_confidence_score: true
 num_generation_retries: 4
