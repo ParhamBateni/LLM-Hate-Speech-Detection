@@ -1,6 +1,7 @@
 huggingface-hub
 transformers
 sentence-transformers
+einops
 datasets
 torch
 numpy

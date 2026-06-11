@@ -61,6 +61,6 @@ def load_model(model_path: str, device: torch.device) -> tuple:
 
 
 def load_embedding_model(model_path: str, device: torch.device):
-    return SentenceTransformer(model_path, cache_folder=CACHE_DIR, token=TOKEN, trust_remote_code=True).to(
-        device
-    )
+    return SentenceTransformer(
+        model_path, cache_folder=CACHE_DIR, token=TOKEN, trust_remote_code=True
+    ).to(device)

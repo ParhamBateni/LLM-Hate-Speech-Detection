@@ -8,9 +8,9 @@ import random
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances_argmin
 from sentence_transformers import SentenceTransformer
-import umap
 from sklearn.preprocessing import normalize
 import numpy as np
+from itertools import zip_longest
 
 
 def build_hate_speech_system_prompt(
@@ -38,7 +38,7 @@ def build_hate_speech_system_prompt(
     #     "Never refuse, apologize, or say you cannot classify, label, or analyze the text.\n\n"
     # )
     task_intro = "Classify the QUERY as hateful or non-hateful. "
-    refusal_guard_block = "Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.\n\n"
+    refusal_guard_block = "Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.\n"
 
     if has_definition:
         if has_examples:
@@ -80,11 +80,10 @@ def build_hate_speech_system_prompt(
     )
 
     output_format_block = (
-        "Respond ONLY in the following format:\n"
+        "Respond ONLY in the following format and add no other text:\n"
         "PREDICTION: non-hateful\n"
         "or\n"
         "PREDICTION: hateful\n\n"
-        "do not add any other text."
     )
 
     return "".join(
@@ -197,21 +196,16 @@ class FewShotPrompting(Prompting):
                 self._cache = {}
             self._cache["grouped_examples"] = grouped_examples
 
-        selected = []
+        selected = {}
         if self._few_shot_mode == self.FewShotMode.RANDOM:
             for group in sorted(list(grouped_examples.keys()), reverse=True):
                 rng = random.Random(random_state)
-                selected.extend(
-                    [
-                        (
-                            example,
-                            group,
-                        )
-                        for example in rng.sample(
-                            grouped_examples[group], self._num_shots_per_group
-                        )
-                    ]
-                )
+                selected[group] = [
+                    (example, group)
+                    for example in rng.sample(
+                        grouped_examples[group], self._num_shots_per_group
+                    )
+                ]
 
         elif self._few_shot_mode == self.FewShotMode.DIVERSE:
             if use_cache:
@@ -240,15 +234,9 @@ class FewShotPrompting(Prompting):
                 closest_indices = pairwise_distances_argmin(
                     group_centroids, normalized_group_embeddings
                 )
-                selected.extend(
-                    [
-                        (
-                            grouped_examples[group][idx],
-                            group,
-                        )
-                        for idx in closest_indices
-                    ]
-                )
+                selected[group] = [
+                    (grouped_examples[group][idx], group) for idx in closest_indices
+                ]
 
             self._cache["centroids"] = centroids
             self._cache["normalized_embeddings"] = normalized_embeddings
@@ -283,27 +271,29 @@ class FewShotPrompting(Prompting):
                 closest_indices = [
                     idx for idx in closest_indices if idx != index_query
                 ][: self._num_shots_per_group]
-                selected.extend(
-                    [
-                        (
-                            grouped_examples[group][idx],
-                            group,
-                        )
-                        for idx in closest_indices
-                    ]
-                )
+                selected[group] = [
+                    (grouped_examples[group][idx], group) for idx in closest_indices
+                ]
 
             self._cache["normalized_embeddings"] = normalized_embeddings
         else:
             raise ValueError(f"Invalid few-shot mode: {self._few_shot_mode}")
 
-        examples_text = ""
         if selected:
-            examples_text = (
-                "EXAMPLES:\n\n"
-                + "\n\n".join(f"TEXT: {ex[0]}\nPREDICTION: {ex[1]}" for ex in selected)
-                + "\n\n"
-            )
+            interleaved_examples = [
+                x
+                for pair in zip_longest(*selected.values())
+                for x in pair
+                if x is not None
+            ]
+            examples_text = ""
+            for i, ex in enumerate(interleaved_examples):
+                escaped_text = ex[0].replace('"', "'")
+                examples_text += (
+                    f"EXAMPLE {i+1}:\n"
+                    f'QUERY: "{escaped_text}"\n'
+                    f"LABEL: {ex[1]}\n\n"
+                )
 
         return build_hate_speech_system_prompt(
             definition,
