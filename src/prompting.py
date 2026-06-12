@@ -45,17 +45,17 @@ def build_hate_speech_system_prompt(
             definition_conditioning_block = (
                 "You must ONLY consider HATE_SPEECH_DEFINITION"
                 + " and the EXAMPLES"
-                + " when deciding the label. Do not use other hate-speech policies or default moderation rules.\n\n"
+                + " when deciding the label. Do not use other hate-speech policies or default moderation rules. If you can't confidently classify the QUERY as hateful based on the HATE_SPEECH_DEFINITION and the EXAMPLES, then predict 'non-hateful'.\n\n"
             )
         else:
             definition_conditioning_block = (
                 "You must ONLY consider HATE_SPEECH_DEFINITION"
-                + " when deciding the label. Do not use other hate-speech policies or default moderation rules.\n\n"
+                + " when deciding the label. Do not use other hate-speech policies or default moderation rules. If you can't confidently classify the QUERY as hateful based on the HATE_SPEECH_DEFINITION, then predict 'non-hateful'.\n\n"
             )
     else:
         if has_examples:
             definition_conditioning_block = (
-                "Consider the EXAMPLES when deciding the label.\n\n"
+                "Consider the EXAMPLES when deciding the label. If you can't confidently classify the QUERY as hateful based on the EXAMPLES, then predict 'non-hateful'.\n\n"
             )
         else:
             definition_conditioning_block = ""
@@ -290,7 +290,7 @@ class FewShotPrompting(Prompting):
                 escaped_text = ex[0].replace('"', "'")
                 examples_text += (
                     f"EXAMPLE {i+1}:\n"
-                    f'QUERY: "{escaped_text}"\n'
+                    f'TEXT: "{escaped_text}"\n'
                     f"LABEL: {ex[1]}\n\n"
                 )
 

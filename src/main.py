@@ -394,9 +394,9 @@ if __name__ == "__main__":
     datasets_list = []
     for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
-        for hate_speech_definition in config["datasets"][dataset_name].get(
-            "hate_speech_definitions", []
-        ) + config.get("extra_hate_speech_definitions", []):
+        for hate_speech_definition in config.get(
+            "extra_hate_speech_definitions", []
+        ) + config["datasets"][dataset_name].get("hate_speech_definitions", []):
             try:
                 definition = HateSpeechDefinition.load_definition(
                     hate_speech_definition
