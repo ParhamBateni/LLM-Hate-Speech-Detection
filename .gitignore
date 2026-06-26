@@ -9,3 +9,4 @@ runs/
 .venv-backups/
 logs/
 notebooks/
+*.xlsx

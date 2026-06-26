@@ -149,10 +149,6 @@ def predict(
             generation_kwargs["temperature"] = temperature
             generation_kwargs["top_p"] = top_p
 
-        else:
-            generation_kwargs["temperature"] = 0.0
-            generation_kwargs["top_p"] = 1.0
-
         attention_mask = inputs.get("attention_mask")
         if attention_mask is None:
             attention_mask = torch.ones_like(inputs["input_ids"], device=device)

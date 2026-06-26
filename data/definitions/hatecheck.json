@@ -16,8 +16,8 @@
     "gender identity",
     "pregnancy"
   ],
-  "dominance": false,
-  "dominant_groups": [],
+  "dominance": true,
+  "dominant_groups": ["men", "white people"],
   "perpetrator_characteristics": [],
   "explicit_reference": [
     "group characteristic",
