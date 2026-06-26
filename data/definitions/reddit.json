@@ -1,50 +1,29 @@
 {
   "name": "Reddit",
-  "definition_text": "Hate speech is attacks on marginalized or vulnerable groups of people, or the incitement of violence or promotion of hate based on identity or vulnerability. Marginalized or vulnerable groups include, but are not limited to, groups based on actual and perceived race, color, religion, national origin, ethnicity, immigration status, gender, gender identity, sexual orientation, pregnancy, or disability, as well as victims of a major violent event and their families.",
-  "aspects": {
-    "target_groups": {
-      "selected": [
-        "race",
-        "color",
-        "religion",
-        "nationality",
-        "ethnicity",
-        "gender",
-        "gender_identity",
-        "sexual_orientation",
-        "pregnancy",
-        "disability"
-      ],
-      "notes": "Marginalized or vulnerable groups include, but are not limited to, groups based on actual and perceived race, color, religion, national origin, ethnicity, immigration status, gender, gender identity, sexual orientation, pregnancy, or disability. Victims of a major violent event and their families are also covered. Immigration status is named in the rule but is outside the HSC domain template; it is noted here only. The rule emphasizes protection of marginalized or vulnerable groups rather than a general right of all users to equal protection on any identity basis."
-    },
-    "dominance": {
-      "enable": {
-        "selected": false
-      },
-      "groups": {
-        "selected": []
-      },
-      "notes": "Dominant groups are not treated as explicit targets of protection. The rule frames harm in terms of attacks on marginalized or vulnerable groups and hate based on identity or vulnerability, not attacks on dominant groups."
-    },
-    "perpetrator_characteristics": {
-      "selected": [],
-      "notes": "Perpetrator-related conditions are specified but do not map cleanly to the standard HSC perpetrator types. The hate rule does not protect those who promote attacks of hate, or those who try to hide hate in bad-faith claims of discrimination. Context and pattern of behavior are considered when evaluating communities or users."
-    },
-    "explicit_reference": {
-      "selected": [
-        "group_characteristic",
-        "slur",
-        "stereotype"
-      ],
-      "notes": "Illustrative violations include describing a racial minority as sub-human or inferior, harmful religious tropes or generalizations (e.g. control of media, terrorism), and denial or minimization of the scale of a hate-based violent event. These correspond to group characteristics, slurs, and stereotypes in the HSC schema."
-    },
-    "effects_consequences": {
-      "selected": [
-        "violence",
-        "hate",
-        "group_insult"
-      ],
-      "notes": "Users have a right to be free of harassment, bullying, and threats of violence. Bannable activity includes incitement of violence and promotion of hate. Examples include advocating that violence against a protected group should be acceptable and content that treats a group as unfit for civil rights (e.g. voting). Discrimination is not named separately in the rule text; bad-faith discrimination claims are addressed under perpetrator exclusions rather than as a listed effect."
-    }
-  }
+  "definition_text": "Rule 1: Remember the human. Reddit is a place for creating community and belonging, not for attacking marginalized or vulnerable groups of people. Everyone has a right to use Reddit free of harassment, bullying, and threats of violence. Communities and people that incite violence or that promote hate based on identity or vulnerability will be banned.  Marginalized or vulnerable groups include, but are not limited to, groups based on their actual and perceived race, color, religion, national origin, ethnicity, immigration status, gender, gender identity, sexual orientation, pregnancy, or disability. These include victims of a major violent event and their families. While the rule on hate protects such groups, it does not protect those who promote attacks of hate or who try to hide their hate in bad faith claims of discrimination. Some examples of hateful activities that would violate the rule: Community dedicated to mocking people with physical disabilities. Post describing a racial minority as sub-human and inferior to the racial majority. Comment arguing that rape of women should be acceptable and not a crime. Meme declaring that it is sickening that people of color have the right to vote. Post promoting harmful tropes or generalizations based on religion (e.g. a certain religious group controls the media, or consists entirely of terrorists). A comment denying or minimizing the scale of a hate-based violent event. Additionally, when evaluating the activity of a community or an individual user, we consider both the context as well as the pattern of behavior.",
+  "target_groups": [
+    "color",
+    "disability",
+    "ethnicity",
+    "gender",
+    "nationality",
+    "race",
+    "religion",
+    "sexual orientation",
+    "immigration status",
+    "pregnancy"
+  ],
+  "dominance": false,
+  "dominant_groups": [],
+  "perpetrator_characteristics": [],
+  "explicit_reference": [
+    "group characteristic",
+    "slur",
+    "stereotype"
+  ],
+  "incites": [
+    "hate",
+    "violence"
+  ],
+  "insults_group": true
 }

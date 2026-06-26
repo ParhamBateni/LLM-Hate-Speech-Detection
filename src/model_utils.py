@@ -1,12 +1,31 @@
 import os
+import random
 from typing import Literal
 
+import numpy as np
 import torch
 import transformers
 from sentence_transformers import SentenceTransformer
 
 CACHE_DIR = "cache"
 TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_HUB_TOKEN")
+
+
+def resolve_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def seed_everything(seed: int) -> None:
+    """Set RNG seeds for Python, NumPy, and PyTorch without disabling CUDA parallelism."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
 
 def model_kind_for_path(model_path: str) -> Literal["causal", "seq2seq"]:

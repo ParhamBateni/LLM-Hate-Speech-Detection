@@ -1,16 +1,16 @@
-from abc import abstractmethod
-
-from typing import Optional, List, Tuple
-from enum import StrEnum
-from definitions import HateSpeechDefinition
 from abc import ABC, abstractmethod
+from enum import StrEnum
+from typing import List, Optional, Tuple
+
+import numpy as np
 import random
+from itertools import zip_longest
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances_argmin
-from sentence_transformers import SentenceTransformer
 from sklearn.preprocessing import normalize
-import numpy as np
-from itertools import zip_longest
+from sentence_transformers import SentenceTransformer
+
+from definitions import HateSpeechDefinition
 
 
 def build_hate_speech_system_prompt(
@@ -197,6 +197,7 @@ class FewShotPrompting(Prompting):
             self._cache["grouped_examples"] = grouped_examples
 
         selected = {}
+        examples_text = ""
         if self._few_shot_mode == self.FewShotMode.RANDOM:
             for group in sorted(list(grouped_examples.keys()), reverse=True):
                 rng = random.Random(random_state)
@@ -222,6 +223,7 @@ class FewShotPrompting(Prompting):
                     kmeans = KMeans(
                         n_clusters=self._num_shots_per_group,
                         random_state=random_state,
+                        n_init=5,
                     )
                     _labels = kmeans.fit_predict(normalized_group_embeddings)
                     group_centroids = kmeans.cluster_centers_
@@ -285,7 +287,6 @@ class FewShotPrompting(Prompting):
                 for x in pair
                 if x is not None
             ]
-            examples_text = ""
             for i, ex in enumerate(interleaved_examples):
                 escaped_text = ex[0].replace('"', "'")
                 examples_text += (

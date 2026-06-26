@@ -2,17 +2,70 @@ hate_speech_criteria_domain: "data/definitions/domain.json"
 
 datasets:
   hatecheck:
-    path: "data/datasets/HateCheck/extended_hatecheck(in).csv"
+    path: "data/datasets/HateCheck/processed_hatecheck.csv"
     text_column: "test_case"
     label_column: "label_gold"
     id_column: "case_id"
     hate_speech_definitions:
+    - type: "vanilla"
+      name: "no_definition"
+      definition_text: ""
     - type: "vanilla"
       name: "hatecheck_vanilla"
       path: "data/definitions/hatecheck.json"
     - type: "criteria"
       name: "hatecheck_hsc"
       path: "data/definitions/hatecheck.json"
+  
+  hatecheck_bulgaria:
+    path: "data/datasets/HateCheck/hatecheck_relabeled_bulgaria.csv"
+    text_column: "test_case"
+    label_column: "def_label"
+    id_column: "case_id"
+    hate_speech_definitions:
+    - type: "criteria"
+      name: "bulgaria_hsc"
+      path: "data/definitions/bulgaria.json"
+
+  hatecheck_croatia:
+    path: "data/datasets/HateCheck/hatecheck_relabeled_croatia.csv"
+    text_column: "test_case"
+    label_column: "def_label"
+    id_column: "case_id"
+    hate_speech_definitions:
+    - type: "criteria"
+      name: "croatia_hsc"
+      path: "data/definitions/croatia.json"
+  
+  hatecheck_meta:
+    path: "data/datasets/HateCheck/hatecheck_relabeled_meta.csv"
+    text_column: "test_case"
+    label_column: "def_label"
+    id_column: "case_id"
+    hate_speech_definitions:
+    - type: "criteria"
+      name: "meta_hsc"
+      path: "data/definitions/meta.json"
+  
+  hatecheck_reddit:
+    path: "data/datasets/HateCheck/hatecheck_relabeled_reddit.csv"
+    text_column: "test_case"
+    label_column: "def_label"
+    id_column: "case_id"
+    hate_speech_definitions:
+    - type: "criteria"
+      name: "reddit_hsc"
+      path: "data/definitions/reddit.json"
+  
+  hatecheck_theoretical:
+    path: "data/datasets/HateCheck/hatecheck_relabeled_theoretical.csv"
+    text_column: "test_case"
+    label_column: "def_label"
+    id_column: "case_id"
+    hate_speech_definitions:
+    - type: "criteria"
+      name: "theoretical_hsc"
+      path: "data/definitions/theoretical.json"
 
 models:
   gemma2_2b_it:
@@ -46,12 +99,9 @@ prompting:
     few_shot_mode: "nearest_query"
     embedding_model_path: "nomic-ai/nomic-embed-text-v1.5"
 
-extra_hate_speech_definitions:
-  - type: "vanilla"
-    name: "no_definition"
-    definition_text: ""
+extra_hate_speech_definitions: []
 
-debug_mode: false
+debug_mode: true
 save_predictions: true
 compute_confidence_score: true
 num_generation_retries: 4

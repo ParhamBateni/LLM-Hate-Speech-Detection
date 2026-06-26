@@ -1,0 +1,25 @@
+{
+    "name": "Theoretical",
+    "definition_text": "Hate speech is defined as language targeted at a dominant or stigmatized person or group based on their race, colour, religion, nationality, ethnicity, sexual orientation, and disability, but not gender, language, or class. It incites violence and hatred but not discrimination, or insults a group through the usage of group characteristics and slurs but not stereotypes. If a slur or group characteristic is used by a member of the targeted group it is not considered hate speech; however if the speaker's group membership is unknown this exception does not apply. ",
+    "target_groups": [
+        "color",
+        "disability",
+        "ethnicity",
+        "nationality",
+        "race",
+        "religion",
+        "sexual orientation"
+    ],
+    "dominance": true,
+    "dominant_groups": ["men", "white people"],
+    "perpetrator_characteristics": ["member of target group"],
+    "explicit_reference": [
+        "group characteristic",
+        "slur"
+    ],
+    "incites": [
+        "hate",
+        "violence"
+    ],
+    "insults_group": true
+}
