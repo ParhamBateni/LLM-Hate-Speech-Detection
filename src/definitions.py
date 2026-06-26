@@ -34,8 +34,20 @@ class HateSpeechDefinition(ABC):
         definition_type = definition_config.get("type") or definition_spec.get("type")
         if definition_type == VanillaHateSpeechDefinition.TYPE():
             return VanillaHateSpeechDefinition._load_definition(definition_config)
+        domain_config = None
+        domain_path = definition_spec.get("domain_path")
+        if domain_path:
+            with open(domain_path, "r") as f:
+                domain_config = json.load(f)
+        exclude_aspects = definition_spec.get("exclude_aspects")
+        if exclude_aspects:
+            a = 10
         if definition_type == CriteriaHateSpeechDefinition.TYPE():
-            return CriteriaHateSpeechDefinition._load_definition(definition_config)
+            return CriteriaHateSpeechDefinition._load_definition(
+                definition_config,
+                domain_config=domain_config,
+                exclude_aspects=exclude_aspects,
+            )
         raise ValueError(
             f"Invalid hate speech definition type: {definition_type!r}. Expected one of: "
             f"{VanillaHateSpeechDefinition.TYPE()!r}, "
@@ -110,6 +122,7 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         insults_group: bool,
         incites: List[str],
         domain_config: Optional[dict] = None,
+        exclude_aspects: Optional[List[str]] = None,
     ):
         super().__init__(name)
         self._target_groups = target_groups
@@ -120,25 +133,28 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         self._insults_group = insults_group
         self._incites = incites
         self._domain_config = domain_config
+        self._exclude_aspects = exclude_aspects
         if domain_config:
             self._validate()
 
     def _validate(self):
-        if not all(
+        if "others" not in self._domain_config["target_groups"]["domain"] and not all(
             group in self._domain_config["target_groups"]["domain"]
             for group in self._target_groups
         ):
             raise ValueError(
                 f"Invalid target groups: {self._target_groups}. Expected one of: {self._domain_config['target_groups']['domain']}"
             )
-        if not all(
-            group in self._domain_config["dominance_groups"]["domain"]
+        if "others" not in self._domain_config["dominant_groups"]["domain"] and not all(
+            group in self._domain_config["dominant_groups"]["domain"]
             for group in self._dominant_groups
         ):
             raise ValueError(
-                f"Invalid dominance groups: {self._dominant_groups}. Expected one of: {self._domain_config['dominance_groups']['domain']}"
+                f"Invalid dominance groups: {self._dominant_groups}. Expected one of: {self._domain_config['dominant_groups']['domain']}"
             )
-        if not all(
+        if "others" not in self._domain_config["perpetrator_characteristics"][
+            "domain"
+        ] and not all(
             characteristic
             in self._domain_config["perpetrator_characteristics"]["domain"]
             for characteristic in self._perpetrator_characteristics
@@ -146,14 +162,16 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             raise ValueError(
                 f"Invalid perpetrator characteristics: {self._perpetrator_characteristics}. Expected one of: {self._domain_config['perpetrator_characteristics']['domain']}"
             )
-        if not all(
+        if "others" not in self._domain_config["explicit_reference"][
+            "domain"
+        ] and not all(
             reference in self._domain_config["explicit_reference"]["domain"]
             for reference in self._explicit_reference
         ):
             raise ValueError(
                 f"Invalid explicit reference: {self._explicit_reference}. Expected one of: {self._domain_config['explicit_reference']['domain']}"
             )
-        if not all(
+        if "others" not in self._domain_config["incites"]["domain"] and not all(
             incite in self._domain_config["incites"]["domain"]
             for incite in self._incites
         ):
@@ -163,7 +181,9 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
 
     @staticmethod
     def _load_definition(
-        definition_config: dict, domain_config: Optional[dict] = None
+        definition_config: dict,
+        domain_config: Optional[dict] = None,
+        exclude_aspects: Optional[List[str]] = None,
     ) -> "CriteriaHateSpeechDefinition":
         try:
             name = definition_config["name"]
@@ -194,6 +214,7 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             insults_group,
             incites,
             domain_config,
+            exclude_aspects,
         )
 
     @staticmethod
@@ -206,20 +227,74 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
             return f"{items[0]} {conjunction} {items[1]}"
         return ", ".join(items[:-1]) + f", {conjunction} {items[-1]}"
 
+    def _domain_excluded_phrases(
+        self,
+        aspect_key: str,
+        selected: List[str],
+        labels: Optional[dict[str, str]] = None,
+    ) -> List[str]:
+        """Domain values omitted from ``selected`` (excluding the ``others`` sentinel)."""
+        if not self._domain_config or aspect_key not in self._domain_config:
+            return []
+        domain = self._domain_config[aspect_key]["domain"]
+        omitted = [
+            item for item in domain if item not in selected and item not in {"others"}
+        ]
+        labels = labels or {}
+        return [labels.get(item, str(item)) for item in omitted]
+
+    def _apply_domain_exclusions(
+        self,
+        text: str,
+        aspect_key: str,
+        selected: List[str],
+        labels: Optional[dict[str, str]] = None,
+    ) -> str:
+        if not self._exclude_aspects or aspect_key not in self._exclude_aspects:
+            return text
+
+        excluded_phrases = self._domain_excluded_phrases(aspect_key, selected, labels)
+        if not excluded_phrases:
+            return text
+
+        labels = {
+            "target_groups": "Target groups",
+            "dominant_groups": "Dominant groups",
+            "perpetrator_characteristics": "Perpetrator characteristics",
+            "explicit_reference": "Explicit references",
+            "incites": "Effects",
+        }
+        standalone = (
+            f"{labels.get(aspect_key, aspect_key.replace('_', ' '))} such as "
+            f"{self._format_list(excluded_phrases)} are not considered"
+        )
+        if text:
+            return text.rstrip(". ") + f". {standalone}"
+        return standalone + "."
+
     def _target_groups_phrase(self) -> str:
-        if self._target_groups:
-            return f" based on their {self._format_list(self._target_groups)}"
-        return ""
+        if not self._target_groups:
+            return ""
+        text = f" based on their {self._format_list(self._target_groups)}"
+        return self._apply_domain_exclusions(text, "target_groups", self._target_groups)
 
     def _dominance_phrase(self) -> str:
         if self._dominance:
             if self._dominant_groups:
                 groups = self._format_list(self._dominant_groups)
-                return f"person or group (including {groups})"
+                text = f"person or group (including {groups})"
+                return self._apply_domain_exclusions(
+                    text, "dominant_groups", self._dominant_groups
+                )
             return "person or group"
         return "historically non-dominant person or group"
 
     def _perpetrator_characteristics_phrase(self) -> str:
+        characteristic_labels = {
+            "dominance of group": "dominance of group",
+            "member of target group": "member of target group",
+            "societal role": "societal role",
+        }
         phrases = []
         for characteristic in self._perpetrator_characteristics:
             if characteristic == "member of target group":
@@ -234,7 +309,13 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
                 phrases.append(
                     "Consider the speaker's societal role, as statements made by individuals with authority or public influence (e.g., politicians, executives, or public figures) may have greater impact than identical statements made by private individuals."
                 )
-        return " ".join(phrases) if phrases else ""
+        text = " ".join(phrases) if phrases else ""
+        return self._apply_domain_exclusions(
+            text,
+            "perpetrator_characteristics",
+            self._perpetrator_characteristics,
+            characteristic_labels,
+        )
 
     def _explicit_reference_phrase(self) -> str:
         if not self._explicit_reference:
@@ -247,16 +328,27 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         reference_phrases = [
             phrases.get(reference, reference) for reference in self._explicit_reference
         ]
-        return f" using references such as {self._format_list(reference_phrases)}"
+        text = f" using references such as {self._format_list(reference_phrases)}"
+        return self._apply_domain_exclusions(
+            text, "explicit_reference", self._explicit_reference, phrases
+        )
 
     def _incites_phrase(self) -> str:
-        clauses: list[str] = []
+        incite_labels = {
+            "discrimination": "discrimination",
+            "hate": "hate",
+            "violence": "violence",
+        }
         if self._incites:
-            clauses.append(f"incites {self._format_list(self._incites)}")
+            incite_part = f"incites {self._format_list(self._incites)}"
+            incite_part = self._apply_domain_exclusions(
+                incite_part, "incites", self._incites, incite_labels
+            )
+            if self._insults_group:
+                return f"{incite_part}, or insults a group"
+            return incite_part
         if self._insults_group:
-            clauses.append("insults a group")
-        if clauses:
-            return " or ".join(clauses)
+            return "insults a group"
         return "expresses hostility toward a group"
 
     def prompt_text(self) -> str:

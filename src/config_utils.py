@@ -15,14 +15,18 @@ def read_config(config_path: str) -> dict:
 
 def load_datasets_from_config(config: dict) -> list[HateSpeechDataset]:
     datasets_list = []
+    domain_path = config.get("hate_speech_criteria_domain")
     for dataset_name in tqdm(config["datasets"], desc="Loading datasets"):
         definitions = []
         for hate_speech_definition in config["datasets"][dataset_name].get(
             "hate_speech_definitions", []
         ) + config.get("extra_hate_speech_definitions", []):
             try:
+                definition_spec = dict(hate_speech_definition)
+                if domain_path and definition_spec.get("type") == "criteria":
+                    definition_spec["domain_path"] = domain_path
                 definitions.append(
-                    HateSpeechDefinition.load_definition(hate_speech_definition)
+                    HateSpeechDefinition.load_definition(definition_spec)
                 )
             except Exception as e:
                 print(

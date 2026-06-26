@@ -27,6 +27,11 @@ datasets:
       name: "bulgaria_hsc"
       path: "data/definitions/bulgaria.json"
 
+    - type: "criteria"
+      name: "bulgaria_hsc_target_excluded"
+      path: "data/definitions/bulgaria.json"
+      exclude_aspects: ["target_groups"]
+
   hatecheck_croatia:
     path: "data/datasets/HateCheck/hatecheck_relabeled_croatia.csv"
     text_column: "test_case"
@@ -66,16 +71,20 @@ datasets:
     - type: "criteria"
       name: "theoretical_hsc"
       path: "data/definitions/theoretical.json"
+    - type: "criteria"
+      name: "theoretical_hsc_target_excluded"
+      path: "data/definitions/theoretical.json"
+      exclude_aspects: ["target_groups"]
 
 models:
-  gemma2_2b_it:
-    path: "google/gemma-2-2b-it"
-  # llama3_2_1b_instruct:
-  #   path: "meta-llama/Llama-3.2-1B-Instruct"
-  llama3_2_3b_instruct:
-    path: "meta-llama/Llama-3.2-3B-Instruct"
-  qwen2_5_3b_instruct:
-    path: "Qwen/Qwen2.5-3B-Instruct"
+  # gemma2_2b_it:
+  #   path: "google/gemma-2-2b-it"
+  llama3_2_1b_instruct:
+    path: "meta-llama/Llama-3.2-1B-Instruct"
+  # llama3_2_3b_instruct:
+  #   path: "meta-llama/Llama-3.2-3B-Instruct"
+  # qwen2_5_3b_instruct:
+  #   path: "Qwen/Qwen2.5-3B-Instruct"
 
 prompting:
   - type: "zero-shot"

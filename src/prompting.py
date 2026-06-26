@@ -54,9 +54,7 @@ def build_hate_speech_system_prompt(
             )
     else:
         if has_examples:
-            definition_conditioning_block = (
-                "Consider the EXAMPLES when deciding the label. If you can't confidently classify the QUERY as hateful based on the EXAMPLES, then predict 'non-hateful'.\n\n"
-            )
+            definition_conditioning_block = "Consider the EXAMPLES when deciding the label. If you can't confidently classify the QUERY as hateful based on the EXAMPLES, then predict 'non-hateful'.\n\n"
         else:
             definition_conditioning_block = ""
 

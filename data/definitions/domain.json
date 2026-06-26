@@ -10,7 +10,8 @@
       "nationality",
       "race",
       "religion",
-      "sexual orientation"
+      "sexual orientation",
+      "others"
     ]
   },
   "dominance": {
@@ -36,7 +37,7 @@
   "incites": {
     "description": "Potential effects or consequences of the utterance that the definition treats as constitutive of hate speech.",
     "multi_value": true,
-    "domain": ["discrimnation", "hate", "violence"]
+    "domain": ["discrimination", "hate", "violence"]
   },
   "insults_group": {
     "description": "Whether the definition insults a group.",
