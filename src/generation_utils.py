@@ -1,9 +1,9 @@
+"""Tokenizer chat templates, generation-token helpers, and prediction parsing."""
+
 from typing import Literal, Optional, Sequence
 
 import numpy as np
-import pandas as pd
 import torch
-from sklearn.metrics import confusion_matrix
 
 
 def build_prompt(

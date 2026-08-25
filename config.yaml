@@ -7,100 +7,84 @@ datasets:
     label_column: "label_gold"
     id_column: "case_id"
     hate_speech_definitions:
-    - type: "vanilla"
-      name: "no_definition"
-      definition_text: ""
-    - type: "vanilla"
-      name: "hatecheck_vanilla"
-      path: "data/definitions/hatecheck.json"
-    - type: "criteria"
-      name: "hatecheck_hsc"
-      path: "data/definitions/hatecheck.json"
-  
+      - type: "vanilla"
+        name: "hatecheck_no_definition"
+        definition_text: ""
+
+      # Commented out because we focus on the criteria-based definitions
+      # - type: "vanilla"
+      #   name: "hatecheck_vanilla"
+      #   path: "data/definitions/hatecheck.json"
+
+      - type: "criteria"
+        name: "hatecheck_hsc"
+        path: "data/definitions/hatecheck.json"
+
   hatecheck_bulgaria:
-    path: "data/datasets/HateCheck/hatecheck_relabeled_bulgaria.csv"
+    path: "data/datasets/HateCheck/processed_hatecheck_relabeled_bulgaria.csv"
     text_column: "test_case"
     label_column: "def_label"
     id_column: "case_id"
     hate_speech_definitions:
-    - type: "criteria"
-      name: "bulgaria_hsc"
-      path: "data/definitions/bulgaria.json"
+      - type: "vanilla"
+        name: "bulgaria_no_definition"
+        definition_text: ""
 
-    - type: "criteria"
-      name: "bulgaria_hsc_target_excluded"
-      path: "data/definitions/bulgaria.json"
-      exclude_aspects: ["target_groups"]
+      - type: "criteria"
+        name: "bulgaria_hsc"
+        path: "data/definitions/bulgaria.json"
 
-  hatecheck_croatia:
-    path: "data/datasets/HateCheck/hatecheck_relabeled_croatia.csv"
-    text_column: "test_case"
-    label_column: "def_label"
-    id_column: "case_id"
-    hate_speech_definitions:
-    - type: "criteria"
-      name: "croatia_hsc"
-      path: "data/definitions/croatia.json"
-  
-  hatecheck_meta:
-    path: "data/datasets/HateCheck/hatecheck_relabeled_meta.csv"
-    text_column: "test_case"
-    label_column: "def_label"
-    id_column: "case_id"
-    hate_speech_definitions:
-    - type: "criteria"
-      name: "meta_hsc"
-      path: "data/definitions/meta.json"
-  
+      - type: "criteria"
+        name: "bulgaria_hsc_target_excluded"
+        path: "data/definitions/bulgaria.json"
+        exclude_aspects: ["target_groups"]
+
   hatecheck_reddit:
-    path: "data/datasets/HateCheck/hatecheck_relabeled_reddit.csv"
+    path: "data/datasets/HateCheck/processed_hatecheck_relabeled_reddit.csv"
     text_column: "test_case"
     label_column: "def_label"
     id_column: "case_id"
     hate_speech_definitions:
-    - type: "criteria"
-      name: "reddit_hsc"
-      path: "data/definitions/reddit.json"
-  
-  hatecheck_theoretical:
-    path: "data/datasets/HateCheck/hatecheck_relabeled_theoretical.csv"
-    text_column: "test_case"
-    label_column: "def_label"
-    id_column: "case_id"
-    hate_speech_definitions:
-    - type: "criteria"
-      name: "theoretical_hsc"
-      path: "data/definitions/theoretical.json"
-    - type: "criteria"
-      name: "theoretical_hsc_target_excluded"
-      path: "data/definitions/theoretical.json"
-      exclude_aspects: ["target_groups"]
+      - type: "vanilla"
+        name: "reddit_no_definition"
+        definition_text: ""
+
+      - type: "criteria"
+        name: "reddit_hsc"
+        path: "data/definitions/reddit.json"
 
 models:
-  # gemma2_2b_it:
-  #   path: "google/gemma-2-2b-it"
-  llama3_2_1b_instruct:
-    path: "meta-llama/Llama-3.2-1B-Instruct"
-  # llama3_2_3b_instruct:
-  #   path: "meta-llama/Llama-3.2-3B-Instruct"
-  # qwen2_5_3b_instruct:
-  #   path: "Qwen/Qwen2.5-3B-Instruct"
+  # You can switch to llama3.2-1b-instruct only for faster inference
+  # llama3_2_1b_instruct:
+  #   path: "meta-llama/Llama-3.2-1B-Instruct"
+
+  gemma2_2b_it:
+    path: "google/gemma-2-2b-it"
+
+  llama3_2_3b_instruct:
+    path: "meta-llama/Llama-3.2-3B-Instruct"
+
+  qwen2_5_3b_instruct:
+    path: "Qwen/Qwen2.5-3B-Instruct"
 
 prompting:
   - type: "zero-shot"
     name: "zero-shot"
     reasoning_enabled: false
+
   - type: "few-shot"
     name: "few-shot-random"
     reasoning_enabled: false
     num_shots_per_group: 4
     few_shot_mode: "random"
+
   - type: "few-shot"
     name: "few-shot-diverse"
     reasoning_enabled: false
     num_shots_per_group: 4
     few_shot_mode: "diverse"
     embedding_model_path: "nomic-ai/nomic-embed-text-v1.5"
+
   - type: "few-shot"
     name: "few-shot-nearest-query"
     reasoning_enabled: false
@@ -110,7 +94,7 @@ prompting:
 
 extra_hate_speech_definitions: []
 
-debug_mode: true
+debug_mode: false
 save_predictions: true
 compute_confidence_score: true
 num_generation_retries: 4

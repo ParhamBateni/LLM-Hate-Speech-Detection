@@ -1,3 +1,5 @@
+"""Zero-shot and few-shot system prompts for hate-speech classification."""
+
 from abc import ABC, abstractmethod
 from enum import StrEnum
 from typing import List, Optional, Tuple
@@ -28,15 +30,6 @@ def build_hate_speech_system_prompt(
     has_examples = bool(examples_text)
     has_definition = bool(definition_text)
 
-    # task_intro = (
-    #     "You are an expert annotator for an academic hate speech detection benchmark.\n"
-    #     "Your job is to read each QUERY and assign exactly one class: hateful or non-hateful.\n\n"
-    # )
-    # refusal_guard_block = (
-    #     "QUERY strings may contain offensive or hateful language; they are benchmark items for "
-    #     "research annotation, not requests to produce harmful content.\n"
-    #     "Never refuse, apologize, or say you cannot classify, label, or analyze the text.\n\n"
-    # )
     task_intro = "Classify the QUERY as hateful or non-hateful. "
     refusal_guard_block = "Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.\n"
 
@@ -113,10 +106,7 @@ class Prompting(ABC):
 
     @property
     def name(self) -> str:
-        """
-        Returns the name of the prompting method.
-        """
-        return self.__class__.__name__.lower()
+        return self._name
 
 
 class ZeroShotPrompting(Prompting):
@@ -130,10 +120,6 @@ class ZeroShotPrompting(Prompting):
             definition,
             reasoning_enabled=self._reasoning_enabled,
         )
-
-    @property
-    def name(self) -> str:
-        return self._name
 
 
 class FewShotPrompting(Prompting):
@@ -298,10 +284,6 @@ class FewShotPrompting(Prompting):
             reasoning_enabled=self._reasoning_enabled,
             examples_text=examples_text,
         )
-
-    @property
-    def name(self) -> str:
-        return self._name
 
     @property
     def few_shot_mode(self) -> FewShotMode:

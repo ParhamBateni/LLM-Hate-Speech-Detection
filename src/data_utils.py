@@ -1,3 +1,5 @@
+"""Load local or Hub datasets and wrap them with associated hate-speech definitions."""
+
 import datasets
 from typing import List, Optional
 

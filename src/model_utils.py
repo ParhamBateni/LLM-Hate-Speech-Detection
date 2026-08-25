@@ -1,3 +1,5 @@
+"""Model and tokenizer loading, device selection, and RNG seeding."""
+
 import os
 import random
 from typing import Literal

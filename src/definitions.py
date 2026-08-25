@@ -1,3 +1,5 @@
+"""Vanilla (free-text) and criteria-based (HSC) hate-speech definitions for prompts."""
+
 from abc import ABC, abstractmethod
 from typing import List, Any, Optional
 import json
@@ -32,7 +34,7 @@ class HateSpeechDefinition(ABC):
             definition_config = definition_spec
 
         definition_type = definition_config.get("type") or definition_spec.get("type")
-        if definition_type == VanillaHateSpeechDefinition.TYPE():
+        if definition_type == VanillaHateSpeechDefinition.type_name():
             return VanillaHateSpeechDefinition._load_definition(definition_config)
         domain_config = None
         domain_path = definition_spec.get("domain_path")
@@ -40,9 +42,7 @@ class HateSpeechDefinition(ABC):
             with open(domain_path, "r") as f:
                 domain_config = json.load(f)
         exclude_aspects = definition_spec.get("exclude_aspects")
-        if exclude_aspects:
-            a = 10
-        if definition_type == CriteriaHateSpeechDefinition.TYPE():
+        if definition_type == CriteriaHateSpeechDefinition.type_name():
             return CriteriaHateSpeechDefinition._load_definition(
                 definition_config,
                 domain_config=domain_config,
@@ -50,8 +50,8 @@ class HateSpeechDefinition(ABC):
             )
         raise ValueError(
             f"Invalid hate speech definition type: {definition_type!r}. Expected one of: "
-            f"{VanillaHateSpeechDefinition.TYPE()!r}, "
-            f"{CriteriaHateSpeechDefinition.TYPE()!r}, "
+            f"{VanillaHateSpeechDefinition.type_name()!r}, "
+            f"{CriteriaHateSpeechDefinition.type_name()!r}, "
         )
 
     @staticmethod
@@ -65,8 +65,8 @@ class HateSpeechDefinition(ABC):
 
     @staticmethod
     @abstractmethod
-    def TYPE() -> str:
-        """Return the string discriminator of the definition type."""
+    def type_name() -> str:
+        """Return the string discriminator of the definition type (``vanilla`` or ``criteria``)."""
 
     @property
     def name(self) -> str:
@@ -98,7 +98,7 @@ class VanillaHateSpeechDefinition(HateSpeechDefinition):
         return self._definition_text
 
     @staticmethod
-    def TYPE() -> str:
+    def type_name() -> str:
         return "vanilla"
 
 
@@ -368,5 +368,5 @@ class CriteriaHateSpeechDefinition(HateSpeechDefinition):
         return text
 
     @staticmethod
-    def TYPE() -> str:
+    def type_name() -> str:
         return "criteria"

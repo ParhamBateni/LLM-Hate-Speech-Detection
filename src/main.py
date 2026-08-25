@@ -1,3 +1,5 @@
+"""Run the config-driven experiment grid: load models, prompt, generate, and score."""
+
 import gc
 import os
 import shutil
@@ -13,7 +15,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 from tqdm import tqdm
 from typing import Literal, Optional
 
-from chat_utils import (
+from generation_utils import (
     build_prediction_tag_tensors,
     build_prompt,
     calculate_confidence_score,
@@ -33,26 +35,6 @@ from model_utils import load_model, resolve_device, seed_everything
 from prompting import FewShotPrompting, Prompting
 
 load_dotenv()
-
-
-def _experiment_timing(
-    experiment_number: int, total_experiments: int, start_time: float
-) -> tuple[str, str]:
-    elapsed = time.time() - start_time
-    completed = experiment_number - 1
-    remaining_secs = (
-        (elapsed / completed) * (total_experiments - experiment_number + 1)
-        if completed > 0
-        else 0.0
-    )
-
-    def fmt(seconds: float) -> str:
-        total = max(0, int(seconds))
-        hours, rem = divmod(total, 3600)
-        minutes, secs = divmod(rem, 60)
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-
-    return fmt(elapsed), fmt(remaining_secs)
 
 
 def predict(
@@ -90,6 +72,7 @@ def predict(
     prediction_tag_tensors = build_prediction_tag_tensors(tokenizer)
     num_predict_batches = (num_samples + batch_size - 1) // batch_size
 
+    # Nearest-query few-shot depends on the current text, so the system prompt is rebuilt per item.
     if (
         isinstance(prompting_method, FewShotPrompting)
         and prompting_method.few_shot_mode == FewShotPrompting.FewShotMode.NEAREST_QUERY
@@ -227,6 +210,7 @@ def predict(
     )
     problematic_generations_df = pd.DataFrame(problematic_generations)
 
+    # Unparseable outputs are retried with sampling so a later decode can hit the expected format.
     if len(problematic_generations) > 0 and retry_number < num_generation_retries:
         generation_config["do_sample"] = True
         if (
@@ -257,6 +241,26 @@ def predict(
         problematic_generations_df = problematic_generations_df2
 
     return predictions_df, problematic_generations_df
+
+
+def _experiment_timing(
+    experiment_number: int, total_experiments: int, start_time: float
+) -> tuple[str, str]:
+    elapsed = time.time() - start_time
+    completed = experiment_number - 1
+    remaining_secs = (
+        (elapsed / completed) * (total_experiments - experiment_number + 1)
+        if completed > 0
+        else 0.0
+    )
+
+    def fmt(seconds: float) -> str:
+        total = max(0, int(seconds))
+        hours, rem = divmod(total, 3600)
+        minutes, secs = divmod(rem, 60)
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+
+    return fmt(elapsed), fmt(remaining_secs)
 
 
 def _save_system_prompt(
@@ -360,6 +364,7 @@ if __name__ == "__main__":
             for prompting_method in prompting:
                 for definition in dataset.hate_speech_definitions:
                     batch_size = 8
+                    # Retry the same experiment with a smaller batch if generation OOMs.
                     while True:
                         experiment_folder = os.path.join(
                             run_folder,
