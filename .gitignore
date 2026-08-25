@@ -8,6 +8,5 @@ runs/
 .hf_home
 .venv-backups/
 logs/
-notebooks*/
 *.xlsx
 junk/
