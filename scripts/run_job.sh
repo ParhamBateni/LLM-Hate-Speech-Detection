@@ -12,8 +12,11 @@ SESSION_NAME="hsc-${RUN_ID//:/-}"
 
 mkdir -p "$LOG_DIR"
 
+# Vast image venv. Bare `pip` is often /usr/bin/pip (system), so always use this
+# interpreter (or `python -m pip`) — never the first `pip` on PATH.
 if [[ -x "/venv/main/bin/python" ]]; then
   PYTHON="/venv/main/bin/python"
+  export PATH="/venv/main/bin:${PATH}"
 elif command -v python3 &>/dev/null; then
   PYTHON="python3"
 else

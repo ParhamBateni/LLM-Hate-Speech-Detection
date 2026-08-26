@@ -31,7 +31,7 @@ from config_utils import (
 )
 from data_utils import HateSpeechDataset
 from definitions import HateSpeechDefinition
-from model_utils import load_model, resolve_device, seed_everything
+from model_utils import clear_cache_directory, load_model, resolve_device, seed_everything
 from prompting import FewShotPrompting, Prompting
 
 load_dotenv()
@@ -354,6 +354,8 @@ if __name__ == "__main__":
     experiment_number = 1
     start_time = time.time()
     for model_path in model_paths:
+        # Clear cache directory to free up space to prevent out of disk space error.
+        clear_cache_directory()
         current_model, current_tokenizer, model_kind = load_model(
             model_paths[model_path], device
         )
