@@ -20,6 +20,21 @@ The main question is: **how well can prompting alone make an LLM follow a specif
 
 In short: adding the definition is not reliably helpful, and scores drop on the Reddit and Bulgaria relabelings. Few-shot prompting, especially nearest-neighbor examples, moves the numbers more than the definition text does. Residual errors on those relabeled sets concentrate on cases the definition *excludes* (dominant-group targets on Reddit; gender / sexual orientation / disability on Bulgaria). Details are in the paper.
 
+## Hate Speech Criteria (HSC)
+
+[Hate Speech Criteria](https://aclanthology.org/2022.woah-1.17/) (Khurana et al., 2022) is a structured way to write a hate speech definition so that different sources can be compared along the same axes. We follow the encoding used in [DefVerify](https://aclanthology.org/2025.coling-main.293/) (Khurana et al., 2025), including per-sample HSC tags on HateCheck. Each source definition here is stored as JSON under `data/definitions/`. Allowed values for each axis are listed in `data/definitions/domain.json`. The **HSC** prompt condition renders those fields as natural-language instructions; **No Definition** omits that block.
+
+The dimensions we use:
+
+- **Target groups** — which identity categories can be targets (e.g. race, religion, gender, disability, sexual orientation). HateCheck is the broadest of the three; Bulgaria only covers race, nationality/ethnicity, and religion.
+- **Dominance** — whether attacks on *dominant* groups (here: men, white people) still count as hate speech. HateCheck and Bulgaria: yes. Reddit: no (protection is for marginalized / vulnerable groups).
+- **Explicit reference** — which surface forms count as referring to the group (group characteristic, slur, stereotype). All three definitions include all three forms.
+- **Consequences (incites)** — which effects the utterance must involve: violence, hate, and/or discrimination. Reddit names hate and violence but not discrimination as constitutive.
+- **Insults group** — whether group-directed insults/abuse count even without incitement. All three definitions set this to true.
+- **Perpetrator characteristics** — whether speaker identity or role matters (e.g. member of the target group). None of the three sources specify this, so it is left empty and omitted from prompts.
+
+Each HateCheck sample is annotated with the same dimensions. Relabeling (`relabel_hatecheck.ipynb`) flips originally hateful cases to non-hateful when they fall outside a definition’s target-group or dominance scope (and, for Reddit, when the only annotated consequence is discrimination). That is why Reddit and Bulgaria gold labels are narrower than original HateCheck, while the test *text* stays the same.
+
 ## Layout
 
 ```
