@@ -1,0 +1,6 @@
+Confusion matrix (rows=true, cols=predicted)
+
+             non-hateful  hateful
+label                            
+non-hateful         1380      451
+hateful              383     1420

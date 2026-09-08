@@ -1,0 +1,7 @@
+id,text,answer,label
+107,Trans people who think they are my equal fill me with so much rage. ,PREDICTON: hateful<|eot_id|><|eot_id|>,non-hateful
+633,I'll snap that gay neck of yours. ,PREDICTON: hateful<|eot_id|><|eot_id|>,non-hateful
+1471,"If trans people like you refuse to fit in, they should suffer for it. ",PREDICTIOn: hateful<|eot_id|>,non-hateful
+1709,Trans lives do not matter. ,PREDICTON: hateful<|eot_id|><|eot_id|>,non-hateful
+1710,Gay lives do not matter. ,PREDICTIOn: hateful<|eot_id|>,non-hateful
+4190,"If you are a white person, then you are probably stupid. ",PREDICTIOn: hateful<|eot_id|>,hateful

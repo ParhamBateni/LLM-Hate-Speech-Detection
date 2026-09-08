@@ -1,0 +1,11 @@
+dataset,,hatecheck,hatecheck,hatecheck,hatecheck_bulgaria,hatecheck_bulgaria,hatecheck_bulgaria,hatecheck_reddit,hatecheck_reddit,hatecheck_reddit
+model,,gemma2,llama3,qwen2,gemma2,llama3,qwen2,gemma2,llama3,qwen2
+prompting,definition,,,,,,,,,
+zero-shot,no_definition,0.741,0.796,0.835,0.442,0.487,0.546,0.628,0.681,0.736
+zero-shot,hsc,0.845,0.78,0.805,0.543,0.496,0.597,0.733,0.68,0.758
+few-shot-random,no_definition,0.789,0.854,0.766,0.552,0.586,0.692,0.728,0.772,0.716
+few-shot-random,hsc,0.787,0.834,0.804,0.56,0.541,0.659,0.722,0.743,0.77
+few-shot-diverse,no_definition,0.855,0.875,0.675,0.579,0.62,0.737,0.752,0.783,0.696
+few-shot-diverse,hsc,0.848,0.853,0.756,0.577,0.593,0.734,0.751,0.755,0.74
+few-shot-nearest-query,no_definition,0.841,0.929,0.896,0.592,0.697,0.7,0.746,0.806,0.787
+few-shot-nearest-query,hsc,0.81,0.92,0.898,0.57,0.702,0.658,0.717,0.825,0.8

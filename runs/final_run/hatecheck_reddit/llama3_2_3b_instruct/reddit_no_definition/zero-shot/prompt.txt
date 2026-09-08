@@ -1,0 +1,6 @@
+Classify the QUERY as hateful or non-hateful. Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.
+Respond ONLY in the following format and add no other text:
+PREDICTION: non-hateful
+or
+PREDICTION: hateful
+

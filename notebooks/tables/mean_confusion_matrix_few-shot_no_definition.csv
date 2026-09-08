@@ -1,0 +1,4 @@
+,non-hateful-predicted,hateful-predicted,total-predicted
+non-hateful-actual,1130.3 ± 175.6,226.7 ± 175.6,1357.0 ± 0.0
+hateful-actual,139.7 ± 98.4,2137.0 ± 98.4,2276.7 ± 0.5
+total-actual,1270.0 ± 265.7,2363.7 ± 265.9,3633.7 ± 0.5

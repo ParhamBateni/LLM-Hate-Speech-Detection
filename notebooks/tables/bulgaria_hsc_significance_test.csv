@@ -1,0 +1,13 @@
+dataset,model,prompting,comparison,n_paired,f1_a,f1_b,delta_f1,mcnemar_b,mcnemar_c,mcnemar_p_value,bootstrap_ci_low,bootstrap_ci_high,bootstrap_p_value
+hatecheck_bulgaria,gemma2_2b_it,zero-shot,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.5357,0.5435,-0.0078,0,28,3.351596306607732e-07,-0.0107,-0.005,0.0
+hatecheck_bulgaria,gemma2_2b_it,few-shot-random,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.5542,0.5599,-0.0057,6,27,0.0004985148935752058,-0.0089,-0.0027,0.0
+hatecheck_bulgaria,gemma2_2b_it,few-shot-diverse,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.5776,0.5766,0.001,12,8,0.5034446716308594,-0.0014,0.0034,0.4344
+hatecheck_bulgaria,gemma2_2b_it,few-shot-nearest-query,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.5662,0.57,-0.0038,17,31,0.06060196971200607,-0.0075,-0.0003,0.0482
+hatecheck_bulgaria,llama3_2_3b_instruct,zero-shot,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.4835,0.4965,-0.0129,4,48,2.4760732241913895e-09,-0.0171,-0.009,0.0
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-random,bulgaria_hsc_target_excluded vs bulgaria_hsc,3632,0.555,0.5416,0.0134,56,7,1.4717314479880352e-09,0.0094,0.0178,0.0
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-diverse,bulgaria_hsc_target_excluded vs bulgaria_hsc,3631,0.6014,0.5933,0.0081,49,16,7.214111945249377e-05,0.004,0.0124,0.0004
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-nearest-query,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.7089,0.7024,0.0065,47,21,0.0024318453627428555,0.0023,0.0108,0.0016
+hatecheck_bulgaria,qwen2_5_3b_instruct,zero-shot,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.603,0.5966,0.0064,55,29,0.006377301421688333,0.0017,0.0112,0.0072
+hatecheck_bulgaria,qwen2_5_3b_instruct,few-shot-random,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.6744,0.6592,0.0152,88,24,2.6336714742451093e-09,0.0099,0.0207,0.0
+hatecheck_bulgaria,qwen2_5_3b_instruct,few-shot-diverse,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.7588,0.7338,0.025,135,29,2.421480760036625e-16,0.0182,0.0319,0.0
+hatecheck_bulgaria,qwen2_5_3b_instruct,few-shot-nearest-query,bulgaria_hsc_target_excluded vs bulgaria_hsc,3634,0.6869,0.6584,0.0285,131,16,5.325059888339132e-21,0.0227,0.0347,0.0

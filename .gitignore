@@ -1,12 +1,9 @@
 .venv
 cache
+.cache
 .env
 .DS_Store
-runs/
-*.sql
 */__pycache__/
 .hf_home
-.venv-backups/
 logs/
-*.xlsx
 junk/

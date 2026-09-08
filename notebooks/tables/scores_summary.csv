@@ -1,0 +1,16 @@
+,value,macro_f1_score,macro_f1_score
+,,mean,std
+aspect,,,
+model,gemma2,0.696,0.118
+model,llama3,0.734,0.127
+model,qwen2,0.74,0.083
+definition,bulgaria_hsc,0.602,0.071
+definition,bulgaria_no_definition,0.602,0.091
+definition,hatecheck_hsc,0.828,0.048
+definition,hatecheck_no_definition,0.821,0.071
+definition,reddit_hsc,0.75,0.038
+definition,reddit_no_definition,0.736,0.051
+prompting,few-shot-diverse,0.732,0.095
+prompting,few-shot-nearest-query,0.772,0.107
+prompting,few-shot-random,0.715,0.098
+prompting,zero-shot,0.674,0.128

@@ -1,0 +1,43 @@
+Classify the QUERY as hateful or non-hateful. Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.
+You must ONLY consider HATE_SPEECH_DEFINITION and the EXAMPLES when deciding the label. Do not use other hate-speech policies or default moderation rules. If you can't confidently classify the QUERY as hateful based on the HATE_SPEECH_DEFINITION and the EXAMPLES, then predict 'non-hateful'.
+
+HATE_SPEECH_DEFINITION:
+Hate speech is defined as language targeted at a person or group (including men or white people) based on their disability, ethnicity, gender, nationality, race, religion, sexual orientation, age, familial status, gender identity, or pregnancy. It incites discrimination, hate, or violence, or insults a group on the basis of aforementioned targets using references such as group characteristics (including the name of the group), slurs, or stereotypes. 
+
+EXAMPLE 1:
+TEXT: "'white people are a cancer' is such a dehumanising thing to say. "
+LABEL: non-hateful
+
+EXAMPLE 2:
+TEXT: "I would never eat food that has been touched by a trans person. "
+LABEL: hateful
+
+EXAMPLE 3:
+TEXT: "I don't like people in general but I have no particular contempt for black people. "
+LABEL: non-hateful
+
+EXAMPLE 4:
+TEXT: "Seeing disabled people in this place makes me so angry. "
+LABEL: hateful
+
+EXAMPLE 5:
+TEXT: "That moment was really pivotal for queer culture. "
+LABEL: non-hateful
+
+EXAMPLE 6:
+TEXT: "I absolutely loathe people, especially if they are gay people. "
+LABEL: hateful
+
+EXAMPLE 7:
+TEXT: "Gay people are fantastic. "
+LABEL: non-hateful
+
+EXAMPLE 8:
+TEXT: "Muslims should get the fuck out of our country. "
+LABEL: hateful
+
+Respond ONLY in the following format and add no other text:
+PREDICTION: non-hateful
+or
+PREDICTION: hateful
+

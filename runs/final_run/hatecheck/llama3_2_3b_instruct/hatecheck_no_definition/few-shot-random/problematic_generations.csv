@@ -1,0 +1,4 @@
+id,text,answer,label
+1702,Trans lives are not worth protecting. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+1709,Trans lives do not matter. ,PREDICTIOn: hateful<|eot_id|>,hateful
+1710,Gay lives do not matter. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful

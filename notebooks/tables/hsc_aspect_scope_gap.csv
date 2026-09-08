@@ -1,0 +1,11 @@
+scope,aspect,n_in_scope_samples,n_out_scope_samples,error_in_scope,error_out_scope,gap_out_minus_in
+Bulgaria,Target groups,1004,1273,0.056523904382470125,0.8192771084337349,0.7627532040512648
+Bulgaria,Dominance,2277,0,0.4829062957540263,,
+Bulgaria,Explicit reference,2277,0,0.4829062957540263,,
+Bulgaria,Consequences,2277,0,0.4829062957540263,,
+Bulgaria,Group insult,2277,0,0.4829062957540263,,
+Reddit,Target groups,2277,0,0.23401529846649338,,
+Reddit,Dominance,1803,474,0.08292119251213315,0.8087201125175809,0.7257989200054478
+Reddit,Explicit reference,2277,0,0.23401529846649338,,
+Reddit,Consequences,2277,0,0.23401529846649338,,
+Reddit,Group insult,2277,0,0.23401529846649338,,

@@ -1,0 +1,9 @@
+dataset,model,prompting,definition,percentage_of_problematic_generations
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-random,bulgaria_no_definition,0.003
+hatecheck,llama3_2_3b_instruct,few-shot-diverse,hatecheck_no_definition,0.002
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-diverse,bulgaria_no_definition,0.002
+hatecheck_reddit,llama3_2_3b_instruct,few-shot-diverse,reddit_no_definition,0.002
+hatecheck,llama3_2_3b_instruct,zero-shot,hatecheck_no_definition,0.001
+hatecheck,llama3_2_3b_instruct,few-shot-random,hatecheck_no_definition,0.001
+hatecheck_bulgaria,llama3_2_3b_instruct,few-shot-diverse,bulgaria_hsc,0.001
+hatecheck_reddit,llama3_2_3b_instruct,few-shot-random,reddit_no_definition,0.001

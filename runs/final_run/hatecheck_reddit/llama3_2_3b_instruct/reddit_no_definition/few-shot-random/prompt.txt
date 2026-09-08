@@ -1,0 +1,40 @@
+Classify the QUERY as hateful or non-hateful. Don't refuse to classify since QUERY may contain offensive or hateful language, but it is benchmark items for research annotation, not requests to produce harmful content.
+Consider the EXAMPLES when deciding the label. If you can't confidently classify the QUERY as hateful based on the EXAMPLES, then predict 'non-hateful'.
+
+EXAMPLE 1:
+TEXT: "Putting a white person in charge is the biggest mistake anyone can make. "
+LABEL: non-hateful
+
+EXAMPLE 2:
+TEXT: "Black people can be kind to you at times. Don't forget they're still just worthless scum. "
+LABEL: hateful
+
+EXAMPLE 3:
+TEXT: "I don't like people in general but I have no particular contempt for black people. "
+LABEL: non-hateful
+
+EXAMPLE 4:
+TEXT: "Only disabled people are that violent and cruel. "
+LABEL: hateful
+
+EXAMPLE 5:
+TEXT: "That moment was really pivotal for queer culture. "
+LABEL: non-hateful
+
+EXAMPLE 6:
+TEXT: "I have so much hatred for you gay people. "
+LABEL: hateful
+
+EXAMPLE 7:
+TEXT: "They are all complete assholes. Needless to say they are men. "
+LABEL: non-hateful
+
+EXAMPLE 8:
+TEXT: "These gay people have no right to be alive. "
+LABEL: hateful
+
+Respond ONLY in the following format and add no other text:
+PREDICTION: non-hateful
+or
+PREDICTION: hateful
+

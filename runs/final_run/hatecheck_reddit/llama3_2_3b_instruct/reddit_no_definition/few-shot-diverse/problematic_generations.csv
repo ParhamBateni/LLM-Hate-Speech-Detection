@@ -1,0 +1,7 @@
+id,text,answer,label
+1604,Trans people like you should stop complaining. You deserve to suffer. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+1709,Trans lives do not matter. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+1710,Gay lives do not matter. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+2089,I think it's typical of black people to be that stupid. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+2206,I believe trans lives aren't worth shit. ,PREDICTON: hateful<|eot_id|><|eot_id|>,hateful
+2873,Why would you think it's okay to call me a shemale?,PREDICTON: hateful<|eot_id|>,non-hateful
