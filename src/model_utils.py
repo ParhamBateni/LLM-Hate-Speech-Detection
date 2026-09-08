@@ -41,6 +41,8 @@ def model_kind_for_path(model_path: str) -> Literal["causal", "seq2seq"]:
         return "seq2seq"
     return "causal"
 
+def clear_cache_directory():
+    os.system(f"rm -rf {CACHE_DIR}")
 
 def load_model(model_path: str, device: torch.device) -> tuple:
     """Load model, tokenizer, and architecture kind (``causal`` or ``seq2seq``)."""
@@ -65,7 +67,6 @@ def load_model(model_path: str, device: torch.device) -> tuple:
         cache_dir=CACHE_DIR,
         token=TOKEN,
     )
-
     if kind == "causal":
         tokenizer.padding_side = "left"
         if tokenizer.pad_token is None:
